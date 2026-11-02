@@ -1,4 +1,3 @@
-
 """HTTP client for VTEX catalogue searches."""
 
 import asyncio
@@ -44,9 +43,7 @@ async def fetch_vtex_products(
 
     # Exactly one search mode must be provided.
     if (term is None) == (category_id is None):
-        raise ValueError(
-            "Provide either term or category_id, not both"
-        )
+        raise ValueError("Provide either term or category_id, not both")
 
     params_filter: dict[str, str]
 
@@ -98,29 +95,20 @@ async def fetch_vtex_products(
                 timeout=15.0,
             )
         except httpx.RequestError as exc:
-            raise VtexFetchError(
-                f"Network error: {type(exc).__name__}"
-            ) from exc
+            raise VtexFetchError(f"Network error: {type(exc).__name__}") from exc
 
         if response.status_code not in (200, 206):
-            raise VtexFetchError(
-                f"Unexpected VTEX HTTP status: {response.status_code}"
-            )
+            raise VtexFetchError(f"Unexpected VTEX HTTP status: {response.status_code}")
 
         try:
             page_products = response.json()
         except ValueError as exc:
-            raise VtexFetchError(
-                "VTEX returned invalid JSON"
-            ) from exc
+            raise VtexFetchError("VTEX returned invalid JSON") from exc
 
         if not isinstance(page_products, list) or not all(
-            isinstance(product, dict)
-            for product in page_products
+            isinstance(product, dict) for product in page_products
         ):
-            raise VtexFetchError(
-                "VTEX returned an invalid product list"
-            )
+            raise VtexFetchError("VTEX returned an invalid product list")
 
         products.extend(page_products)
 

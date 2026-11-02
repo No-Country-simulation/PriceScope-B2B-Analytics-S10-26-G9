@@ -342,3 +342,69 @@ async def test_scraping_rolls_back_if_second_save_fails(
     assert calls == 2
     assert listing_count == 0
     assert price_count == 0
+
+
+async def test_two_scraping_runs_keep_price_history() -> None:
+    """Two extractions update prices without duplicating the listing."""
+
+    simulated_prices = [3245, 3500]
+    request_count = 0
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+
+        assert request.url.params["ft"] == "leche"
+        assert request_count < len(simulated_prices)
+
+        current_price = simulated_prices[request_count]
+        request_count += 1
+
+        return httpx.Response(
+            200,
+            json=[vtex_product("42896", current_price)],
+        )
+
+    async with (
+        SessionLocal() as db,
+        httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client,
+    ):
+        store = await create_store(db)
+        store_id = store.id
+
+        for _ in range(2):
+            result = await scrape_vtex_store(
+                db,
+                client,
+                store=store,
+                term="leche",
+                own_seller_ids={"1"},
+                page_size=5,
+                max_pages=1,
+            )
+
+            assert result.products_received == 1
+            assert result.observations_saved == 1
+
+    async with SessionLocal() as db:
+        listings = (await db.scalars(select(Listing).where(Listing.store_id == store_id))).all()
+
+        prices = (await db.scalars(select(Price).order_by(Price.captured_at))).all()
+
+    assert request_count == 2
+
+    # One product registered in the store.
+    assert len(listings) == 1
+    assert listings[0].external_code == "42896"
+
+    # Two historical price observations.
+    assert len(prices) == 2
+    assert [price.local_price for price in prices] == [
+        Decimal("3245"),
+        Decimal("3500"),
+    ]
+
+    # Both observations belong to the same listing.
+    assert all(price.listing_id == listings[0].id for price in prices)
+
+    assert all(price.location_id is None for price in prices)
+    assert prices[0].captured_at < prices[1].captured_at

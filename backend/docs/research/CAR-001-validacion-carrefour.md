@@ -92,3 +92,22 @@ La investigación manual permitió identificar diferencias reproducibles de prec
 Los resultados respaldan la necesidad de incorporar contexto regional al modelo de precios de PriceScope.
 
 La reproducción automática de esos resultados todavía requiere validación técnica adicional.
+
+## Integración real del catálogo — 02/11/2026
+
+Se realizó exitosamente una extracción de productos de Carrefour Argentina mediante la API pública de catálogo VTEX.
+
+La operación fue ejecutada desde el endpoint administrativo de PriceScope y devolvió HTTP 200.
+
+**Resultados:**
+- 5 productos recibidos.
+- 5 observaciones guardadas en PostgreSQL.
+- 0 duplicados detectados durante la ejecución.
+- Vendedor identificado: `sellerId = 1`.
+- Clasificación de productos almacenada correctamente.
+
+Por decisión del equipo, la validación regional queda fuera del alcance actual. Las observaciones se almacenan sin atribuirlas a una ubicación específica (`location_id = NULL`).
+
+La consulta del árbol completo de categorías devolvió HTTP 429, por lo que se suspendieron nuevas solicitudes a esa ruta. La extracción principal de productos funciona independientemente de dicho endpoint.
+
+**Estado:** Integración básica de Carrefour validada. Pendiente completar la validación de paginación, los controles de frecuencia y la estrategia de actualización periódica.

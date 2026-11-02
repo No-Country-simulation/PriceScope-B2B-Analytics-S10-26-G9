@@ -3,10 +3,28 @@ import logging
 import aiosmtplib
 import httpx
 from arq import Retry, cron
+from arq.worker import func
+from sqlalchemy import select
 
 from app.core.cache import arq_settings
+from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models import Store
+from app.scrapers.vtex_client import VtexFetchError
 from app.services import mail, rates
+from app.services.scraping import scrape_vtex_store
+from app.services.scraping_lock import (
+    ScrapeAlreadyRunningError,
+    scrape_store_lock,
+)
+from app.services.scraping_rate_limit import throttle_scraping_request
+from app.services.scraping_recovery import (
+    recover_stale_scraping_runs,
+)
+from app.services.scraping_runs import (
+    finish_scraping_run,
+    start_scraping_run,
+)
 
 log = logging.getLogger(__name__)
 
@@ -14,12 +32,25 @@ MAX_TRIES = 5
 
 
 async def startup(ctx: dict) -> None:
-    """Runs once when the worker starts. Creates the shared HTTP client."""
+    """Create HTTP clients for worker jobs."""
+
+    # Existing client used by exchange-rate ingestion.
     ctx["http"] = httpx.AsyncClient(timeout=10)
+
+    # Dedicated client for controlled e-commerce requests.
+    ctx["scraping_http"] = httpx.AsyncClient(
+        timeout=15.0,
+        follow_redirects=False,
+        trust_env=False,
+        event_hooks={
+            "request": [throttle_scraping_request],
+        },
+    )
 
 
 async def shutdown(ctx: dict) -> None:
     await ctx["http"].aclose()
+    await ctx["scraping_http"].aclose()
 
 
 async def send_email(ctx: dict, to: str, subject: str, text: str, body_html: str) -> None:
@@ -41,9 +72,126 @@ async def ingest_rates(ctx: dict) -> int:
         return 0
 
 
+async def recover_scraping_runs(ctx: dict) -> int:
+    """Recover abandoned scraping executions automatically."""
+
+    recovered = await recover_stale_scraping_runs()
+
+    if recovered:
+        log.warning(
+            "Scraping recovery: %s abandoned runs recovered",
+            recovered,
+        )
+
+    return recovered
+
+
+async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
+    """Run one controlled Carrefour catalogue extraction."""
+
+    # The worker must not scrape unless explicitly enabled.
+    if (
+        not settings.scraping_jobs_enabled
+        or not settings.scraping_enabled
+        or "carrefour" not in settings.scraping_allowed_stores
+    ):
+        return {"status": "disabled"}
+
+    seller_ids = {
+        seller_id.strip()
+        for seller_id in settings.scraping_seller_ids.get("carrefour", [])
+        if seller_id.strip()
+    }
+
+    if not seller_ids:
+        return {"status": "not_configured"}
+
+    async with SessionLocal() as db:
+        store = await db.scalar(
+            select(Store).where(
+                Store.slug == "carrefour",
+                Store.base_url == "https://www.carrefour.com.ar",
+                Store.active.is_(True),
+            )
+        )
+
+        if store is None:
+            return {"status": "store_unavailable"}
+
+        try:
+            async with scrape_store_lock(store.id):
+                run_id = await start_scraping_run(
+                    store_id=store.id,
+                    search_mode="term",
+                    search_value="leche",
+                )
+
+                try:
+                    result = await scrape_vtex_store(
+                        db,
+                        ctx["scraping_http"],
+                        store=store,
+                        own_seller_ids=seller_ids,
+                        term="leche",
+                        page_size=5,
+                        max_pages=1,
+                    )
+
+                except Exception as exc:
+                    await db.rollback()
+
+                    if isinstance(exc, VtexFetchError):
+                        error_code = "VTEX_FETCH_ERROR"
+                        error_message = str(exc)[:300]
+                    else:
+                        error_code = "SCRAPING_ERROR"
+                        error_message = type(exc).__name__
+
+                    await finish_scraping_run(
+                        run_id,
+                        status="failed",
+                        error_code=error_code,
+                        error_message=error_message,
+                    )
+
+                    log.warning(
+                        "Carrefour scraping failed: %s",
+                        error_code,
+                    )
+
+                    raise
+
+                await finish_scraping_run(
+                    run_id,
+                    status="success",
+                    products_received=result.products_received,
+                    observations_saved=result.observations_saved,
+                    skipped_duplicates=result.skipped_duplicates,
+                )
+
+                return {
+                    "status": "success",
+                    "products_received": result.products_received,
+                    "observations_saved": result.observations_saved,
+                }
+
+        except ScrapeAlreadyRunningError:
+            return {"status": "already_running"}
+
+
 class WorkerSettings:
-    functions = [send_email]
-    cron_jobs = [cron(ingest_rates, minute=0)]  # at minute 0 of every hour
+    functions = [
+        send_email,
+        func(scrape_carrefour, max_tries=1),
+    ]
+    cron_jobs = [
+        cron(ingest_rates, minute=0),
+        cron(
+            recover_scraping_runs,
+            minute=10,
+            max_tries=1,
+        ),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = arq_settings

@@ -1,23 +1,27 @@
 """Admin-only endpoints for controlled scraping."""
 
+import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.core.config import settings
-from app.models import Store
+from app.models import ScrapingRun, Store
 from app.schemas.scraping import (
     ScrapeCategoriesOutput,
     ScrapeCategoryOutput,
+    ScrapeRecoveryOutput,
     ScrapeRegionalOfferOutput,
     ScrapeRegionalPreviewOutput,
     ScrapeRegionalProductOutput,
+    ScrapeRunHistoryItemOutput,
+    ScrapeRunHistoryOutput,
     ScrapeRunInput,
     ScrapeRunOutput,
     ScrapeSellerOutput,
@@ -38,7 +42,16 @@ from app.services.scraping_lock import (
     scrape_store_lock,
 )
 from app.services.scraping_rate_limit import throttle_scraping_request
+from app.services.scraping_recovery import (
+    recover_stale_scraping_runs,
+)
+from app.services.scraping_runs import (
+    finish_scraping_run,
+    start_scraping_run,
+)
 from app.services.store_locations import get_active_location
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin/scraping",
@@ -148,6 +161,12 @@ async def list_categories(
             levels=levels,
         )
     except VtexFetchError as exc:
+        logger.warning(
+            "Error al obtener categorias VTEX de %s: %s",
+            store.slug,
+            exc,
+        )
+
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             "No se pudo obtener el árbol de categorías",
@@ -208,18 +227,65 @@ async def run_scraping(
             "No hay vendedores propios configurados",
         )
 
+    if data.term is not None:
+        search_mode = "term"
+        search_value = data.term
+    elif data.category_id is not None:
+        search_mode = "category"
+        search_value = str(data.category_id)
+    else:
+        search_mode = "categories"
+        search_value = ",".join(str(value) for value in (data.category_ids or []))
+
     try:
         async with scrape_store_lock(store.id):
-            result = await scrape_vtex_store(
-                db,
-                http,
-                store=store,
-                term=data.term,
-                category_id=data.category_id,
-                category_ids=data.category_ids,
-                own_seller_ids=seller_ids,
-                page_size=data.page_size,
-                max_pages=data.max_pages,
+            run_id = await start_scraping_run(
+                store_id=store.id,
+                search_mode=search_mode,
+                search_value=search_value,
+            )
+
+            try:
+                result = await scrape_vtex_store(
+                    db,
+                    http,
+                    store=store,
+                    term=data.term,
+                    category_id=data.category_id,
+                    category_ids=data.category_ids,
+                    own_seller_ids=seller_ids,
+                    page_size=data.page_size,
+                    max_pages=data.max_pages,
+                )
+
+            except Exception as exc:
+                # Avoid persisting partial price observations.
+                await db.rollback()
+
+                # Do not store secrets or raw responses
+                # in execution history.
+                if isinstance(exc, VtexFetchError):
+                    error_code = "VTEX_FETCH_ERROR"
+                    error_message = str(exc)[:300]
+                else:
+                    error_code = "SCRAPING_ERROR"
+                    error_message = type(exc).__name__
+
+                await finish_scraping_run(
+                    run_id,
+                    status="failed",
+                    error_code=error_code,
+                    error_message=error_message,
+                )
+
+                raise
+
+            await finish_scraping_run(
+                run_id,
+                status="success",
+                products_received=result.products_received,
+                observations_saved=result.observations_saved,
+                skipped_duplicates=result.skipped_duplicates,
             )
 
     except ScrapeAlreadyRunningError as exc:
@@ -474,4 +540,99 @@ async def preview_regional_products(
             for offer in offers
         ],
         offers_truncated=truncated,
+    )
+
+
+@router.get(
+    "/runs",
+    response_model=ScrapeRunHistoryOutput,
+    summary="List scraping execution history",
+)
+async def list_scraping_runs(
+    db: DbSession,
+    _admin: CurrentAdmin,
+    store_slug: Annotated[
+        str | None,
+        Query(min_length=2, max_length=60),
+    ] = None,
+    run_status: Annotated[
+        Literal["running", "success", "failed"] | None,
+        Query(alias="status"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScrapeRunHistoryOutput:
+    """Read scraping executions without contacting stores."""
+
+    conditions = []
+
+    if store_slug is not None:
+        conditions.append(Store.slug == store_slug)
+
+    if run_status is not None:
+        conditions.append(ScrapingRun.status == run_status)
+
+    total_query = (
+        select(func.count())
+        .select_from(ScrapingRun)
+        .join(Store, Store.id == ScrapingRun.store_id)
+        .where(*conditions)
+    )
+
+    total = await db.scalar(total_query) or 0
+
+    query = (
+        select(ScrapingRun, Store.slug)
+        .join(Store, Store.id == ScrapingRun.store_id)
+        .where(*conditions)
+        .order_by(
+            ScrapingRun.started_at.desc(),
+            ScrapingRun.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+
+    rows = (await db.execute(query)).all()
+
+    items = [
+        ScrapeRunHistoryItemOutput(
+            id=run.id,
+            store_slug=slug,
+            status=run.status,
+            search_mode=run.search_mode,
+            search_value=run.search_value,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+            products_received=run.products_received,
+            observations_saved=run.observations_saved,
+            skipped_duplicates=run.skipped_duplicates,
+            error_code=run.error_code,
+            error_message=run.error_message,
+        )
+        for run, slug in rows
+    ]
+
+    return ScrapeRunHistoryOutput(
+        total=total,
+        limit=limit,
+        offset=offset,
+        items=items,
+    )
+
+
+@router.post(
+    "/runs/recover",
+    response_model=ScrapeRecoveryOutput,
+    summary="Recover interrupted scraping runs",
+)
+async def recover_scraping_runs(
+    _admin: CurrentAdmin,
+) -> ScrapeRecoveryOutput:
+    """Recover abandoned runs without contacting external stores."""
+
+    recovered = await recover_stale_scraping_runs()
+
+    return ScrapeRecoveryOutput(
+        recovered=recovered,
     )
