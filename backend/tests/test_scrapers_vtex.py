@@ -1,4 +1,3 @@
-
 import uuid
 from decimal import Decimal
 
@@ -90,9 +89,7 @@ def test_skips_product_without_price() -> None:
 def test_detects_unavailable_product() -> None:
     product = sample_product()
 
-    product["items"][0]["sellers"][1]["commertialOffer"][
-        "AvailableQuantity"
-    ] = 0
+    product["items"][0]["sellers"][1]["commertialOffer"]["AvailableQuantity"] = 0
 
     observations = parse(product)
 
