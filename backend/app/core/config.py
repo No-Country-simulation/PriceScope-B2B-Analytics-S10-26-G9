@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -26,6 +27,15 @@ class Settings(BaseSettings):
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379
+
+    # Scraping
+    scraping_enabled: bool = False
+
+    # Stores explicitly enabled for extraction.
+    scraping_allowed_stores: list[str] = Field(default_factory=list)
+
+    # Verified own seller IDs, configured per store.
+    scraping_seller_ids: dict[str, list[str]] = Field(default_factory=dict)
 
     # Security
     jwt_secret: str

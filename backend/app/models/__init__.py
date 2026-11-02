@@ -14,6 +14,7 @@ from app.models.listing import Listing
 from app.models.price import Price
 from app.models.session import UserSession
 from app.models.store import Store, UserStore
+from app.models.store_location import StoreLocation
 from app.models.user import User
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "UserSession",
     "UserStatus",
     "UserStore",
+    "StoreLocation",
 ]

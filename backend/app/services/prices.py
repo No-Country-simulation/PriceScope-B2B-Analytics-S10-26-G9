@@ -3,11 +3,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Listing, Price, RateType
+from app.models import Listing, Price, RateType, StoreLocation
 from app.services import rates
 
 CENTS = Decimal("0.01")
@@ -28,14 +28,31 @@ class ScrapedObservation:
     category: str | None = None
     grammage: Decimal | None = None
     unit: str | None = None
+    location_id: uuid.UUID | None = None
 
 
 async def record_observation(
-    db: AsyncSession, observation: ScrapedObservation, captured_at: datetime | None = None
+    db: AsyncSession,
+    observation: ScrapedObservation,
+    captured_at: datetime | None = None,
+    *,
+    commit: bool = True,
 ) -> Price | None:
     """Saves the listing (if new) and the price. Returns None if there is no current price."""
     if observation.current_price is None or observation.current_price <= 0:
         return None
+
+    if observation.location_id is not None:
+        valid_location = await db.scalar(
+            select(StoreLocation.id).where(
+                StoreLocation.id == observation.location_id,
+                StoreLocation.store_id == observation.store_id,
+                StoreLocation.active.is_(True),
+            )
+        )
+
+        if valid_location is None:
+            raise ValueError("La ubicación no existe, está inactiva o no pertenece a la tienda")
 
     # Some stores (e.g. Jumbo) publish a fake list price: discard it.
     strikethrough = observation.strikethrough_price
@@ -79,6 +96,7 @@ async def record_observation(
 
     price = Price(
         listing_id=listing_id,
+        location_id=observation.location_id,
         captured_at=captured_at or datetime.now(UTC),
         local_price=observation.current_price,
         strikethrough_price=strikethrough,
@@ -93,6 +111,12 @@ async def record_observation(
         price_usd_official=to_usd(fx_official),
         price_usd_blue=to_usd(fx_blue),
     )
+
     db.add(price)
-    await db.commit()
+
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
+
     return price
