@@ -24,6 +24,17 @@
   --color-danger-bg: #fbe9ef;
   --color-danger-ink: #8e2447;
 
+  /* Warm "paper" palette of the screens opened from an email link
+     (mockup 03b · Definir contraseña). */
+  --color-paper: #f7f6f3;
+  --color-paper-field: #f3f1ec;
+  --color-paper-line: #ece8e0;
+  --color-success: #15803d;
+  --color-success-bg: #e8f7ee;
+  --color-success-line: #bbe5c8;
+  --color-success-fill: #22c55e;
+  --color-warning: #f59e0b;
+
   --font-serif: var(--font-newsreader);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -82,6 +93,19 @@ input:focus-visible {
 
 input:focus {
   border-color: #4a5bdb;
+}
+
+/* The screens opened from an email link (mockup 03b · Definir contraseña)
+   swap the brand ring for the mint one of the design, and keep the field
+   border warm instead of turning it blue. Unlayered on purpose: it has to
+   win over the generic rules above and over the utilities below. */
+.paper-link-screen :is(input, a, button):focus-visible {
+  outline: 3px solid #9cc9b9;
+  outline-offset: 2px;
+}
+
+.paper-link-screen input:focus {
+  border-color: #ece8e0;
 }
 
 :root {

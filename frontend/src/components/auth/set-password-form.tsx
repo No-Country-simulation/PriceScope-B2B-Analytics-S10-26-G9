@@ -1,67 +1,82 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import * as React from "react"
+import Link from "next/link"
 import {
-  ArrowLeftIcon,
   CheckIcon,
-  CircleAlertIcon,
   CircleCheckIcon,
   CircleIcon,
   EyeIcon,
   EyeOffIcon,
-  Loader2Icon,
-  TriangleAlertIcon,
-} from "lucide-react";
+} from "lucide-react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ApiError, apiFetch } from "@/lib/api";
-import { HOME_BY_ROLE, useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
-
-type TokenStatus = "checking" | "valid" | "expired" | "invalid";
-
-type TokenInfo = {
-  status: "valid" | "expired" | "invalid";
-  email: string | null;
-  company: string | null;
-};
+import { Badge } from "@/components/ui/badge"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 
 // "define": first password, from the welcome email the admin triggers.
 // "reset": new password, from the link the user asked for in /recuperar.
-type Mode = "define" | "reset";
+type Mode = "define" | "reset"
 
-const COPY = {
+// Account of the design reference (mockup 03b · Definir contraseña). This
+// screen is still a maqueta: the real name, company and email travel with
+// the welcome link.
+const ACCOUNT = {
+  name: "Lucía",
+  company: "Comercial del Sur S.A.",
+  email: "lucia@comercialdelsur.com",
+}
+
+type Copy = {
+  badge: string | null
+  title: string
+  description: React.ReactNode
+  cta: string
+  footnote: string
+  doneTitle: string
+  doneDescription: string
+}
+
+const COPY: Record<Mode, Copy> = {
   define: {
-    title: "Te damos la bienvenida a PriceScope",
-    cta: "Definir contraseña e ingresar",
-    pending: "Ingresando…",
-    expired:
-      "Los enlaces de bienvenida duran 72 horas. Pedile uno nuevo al equipo de PriceScope.",
-    invalid:
-      "Revisá que hayas copiado el enlace completo del correo, o pedile uno nuevo al equipo de PriceScope.",
+    badge: "Cuenta creada",
+    title: `Bienvenida, ${ACCOUNT.name}`,
+    description: (
+      <>
+        El equipo de PriceScope creó tu cuenta para{" "}
+        <strong className="text-ink">{ACCOUNT.company}</strong>. Definí tu
+        contraseña para ingresar.
+      </>
+    ),
+    cta: "Guardar y continuar",
+    footnote:
+      "Este enlace se usa una sola vez y vence en 72 horas. Si venció, pedile uno nuevo al equipo de PriceScope.",
+    doneTitle: "Contraseña guardada",
+    doneDescription:
+      "Tu cuenta ya está activa. Ingresá con tu correo y la contraseña que elegiste.",
   },
   reset: {
+    badge: null,
     title: "Restablecé tu contraseña",
-    cta: "Guardar contraseña nueva",
-    pending: "Guardando…",
-    expired: "Los enlaces para restablecer duran 1 hora. Pedí uno nuevo.",
-    invalid: "Revisá que hayas copiado el enlace completo, o pedí uno nuevo.",
+    description: (
+      <>
+        Elegí una contraseña nueva para{" "}
+        <strong className="text-ink">{ACCOUNT.company}</strong>.
+      </>
+    ),
+    cta: "Guardar contraseña",
+    footnote:
+      "Este enlace se usa una sola vez y vence en 1 hora. Si venció, pedí uno nuevo.",
+    doneTitle: "Contraseña actualizada",
+    doneDescription:
+      "Tu contraseña quedó guardada. Ya podés ingresar con la nueva.",
   },
-} satisfies Record<Mode, Record<string, string>>;
+}
 
-// Same rules the API enforces in validate_password.
+// Checklist under the fields. The submit stays disabled until all four pass.
 function passwordRules(password: string, confirmation: string) {
   return [
     { label: "Mínimo 8 caracteres", ok: password.length >= 8 },
@@ -71,248 +86,157 @@ function passwordRules(password: string, confirmation: string) {
       label: "Las contraseñas coinciden",
       ok: password.length > 0 && password === confirmation,
     },
-  ];
+  ]
+}
+
+// Four segments: the three required rules plus a bonus one (a symbol, or a
+// password of 12+ characters). "Precios2026" from the mockup scores 3 → buena.
+const STRENGTH = [
+  { label: "muy débil", tone: "text-ink-soft", fill: "" },
+  { label: "débil", tone: "text-destructive", fill: "bg-destructive" },
+  { label: "regular", tone: "text-warning", fill: "bg-warning" },
+  { label: "buena", tone: "text-success", fill: "bg-success-fill" },
+  { label: "excelente", tone: "text-success", fill: "bg-success-fill" },
+]
+
+function strengthScore(password: string) {
+  let score = 0
+  if (password.length >= 8) score += 1
+  if (/[A-ZÁÉÍÓÚÑ]/.test(password)) score += 1
+  if (/[0-9]/.test(password)) score += 1
+  if (/[^A-Za-z0-9]/.test(password) || password.length >= 12) score += 1
+  return score
 }
 
 export function SetPasswordForm({ mode }: { mode: Mode }) {
-  const { token } = useParams<{ token: string }>();
-  const router = useRouter();
-  const { login } = useAuth();
-  const copy = COPY[mode];
+  const copy = COPY[mode]
 
-  const [status, setStatus] = React.useState<TokenStatus>("checking");
-  const [owner, setOwner] = React.useState<TokenInfo | null>(null);
-  const [password, setPassword] = React.useState("");
-  const [confirmation, setConfirmation] = React.useState("");
-  const [pending, setPending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [done, setDone] = React.useState(false);
+  const [password, setPassword] = React.useState("")
+  const [confirmation, setConfirmation] = React.useState("")
+  const [done, setDone] = React.useState(false)
 
-  // Check the link before asking for a password, so an expired one says so
-  // up front instead of after the user typed it twice.
-  React.useEffect(() => {
-    let cancelled = false;
-    apiFetch<TokenInfo>("/auth/token/verify", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    })
-      .then((data) => {
-        if (cancelled) return;
-        setOwner(data);
-        setStatus(data.status);
-      })
-      .catch(() => !cancelled && setStatus("invalid"));
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const rules = passwordRules(password, confirmation)
+  const allOk = rules.every((rule) => rule.ok)
 
-  const rules = passwordRules(password, confirmation);
-  const allOk = rules.every((rule) => rule.ok);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!allOk) return;
-    setPending(true);
-    setError(null);
-    try {
-      await apiFetch("/auth/password", {
-        method: "POST",
-        body: JSON.stringify({ token, password }),
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status < 500) {
-        setError(err.message);
-      } else {
-        setError("No pudimos conectar con el servidor. Probá de nuevo.");
-      }
-      setPending(false);
-      return;
-    }
-    if (mode === "define" && owner?.email) {
-      // First access: sign in right away instead of sending them to log in.
-      // The link is already spent, so if this fails they log in by hand.
-      try {
-        const user = await login(owner.email, password);
-        router.replace(HOME_BY_ROLE[user.role]);
-        return;
-      } catch {
-        // Falls through to the success card.
-      }
-    }
-    setDone(true);
-    setPending(false);
-  }
-
-  if (status === "checking") {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" />
-          Verificando el enlace…
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (status !== "valid") {
-    return (
-      <Card>
-        <CardHeader className="items-center text-center">
-          <span className="mx-auto mb-2 flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-            <TriangleAlertIcon className="size-5" />
-          </span>
-          <CardTitle className="text-xl">
-            {status === "expired"
-              ? "El enlace venció"
-              : "El enlace no es válido"}
-          </CardTitle>
-          <CardDescription>
-            {status === "expired" ? copy.expired : copy.invalid}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {/* Only the admin can resend a welcome link; resets are self-service. */}
-          {mode === "reset" ? (
-            <>
-              <Link
-                href="/recuperar"
-                className={buttonVariants({ size: "lg", className: "h-10" })}
-              >
-                Pedir un enlace nuevo
-              </Link>
-              <BackToLogin />
-            </>
-          ) : (
-            <Link
-              href="/ingresar"
-              className={buttonVariants({
-                variant: "outline",
-                size: "lg",
-                className: "h-10",
-              })}
-            >
-              Volver a ingresar
-            </Link>
-          )}
-        </CardContent>
-      </Card>
-    );
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!allOk) return
+    setDone(true)
   }
 
   if (done) {
     return (
-      <Card role="status">
-        <CardHeader className="items-center text-center">
-          <span className="mx-auto mb-2 flex size-11 items-center justify-center rounded-full bg-muted">
-            <CircleCheckIcon className="size-5" />
+      <Card className="gap-6 rounded-[32px] bg-white p-9 shadow-[0_24px_64px_rgba(120,90,40,0.12)] ring-0">
+        <div className="flex flex-col items-center gap-6 text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
+            <CircleCheckIcon className="size-6" />
           </span>
-          <CardTitle className="text-xl">
-            {mode === "define"
-              ? "Contraseña guardada"
-              : "Contraseña actualizada"}
-          </CardTitle>
-          <CardDescription>
-            {mode === "define"
-              ? "Tu cuenta ya está activa. Ingresá con tu correo y la contraseña que elegiste."
-              : "Tu contraseña quedó guardada. Ya podés ingresar con la nueva."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          <div className="flex flex-col gap-2.5">
+            <h1 className="text-4xl font-extrabold tracking-[-0.035em]">
+              {copy.doneTitle}
+            </h1>
+            <p className="text-base leading-relaxed text-ink-soft">
+              {copy.doneDescription}
+            </p>
+          </div>
           <Link
             href="/ingresar"
-            className={buttonVariants({ size: "lg", className: "h-10 w-full" })}
+            className={buttonVariants({
+              size: "lg",
+              className:
+                "h-[56px] w-full rounded-full px-6 text-base font-semibold shadow-[0_10px_24px_rgba(28,28,30,0.22)]",
+            })}
           >
             Ir a ingresar
           </Link>
-        </CardContent>
+        </div>
       </Card>
-    );
+    )
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{copy.title}</CardTitle>
-        <CardDescription>
-          {mode === "define" ? (
-            <>
-              {owner?.company ? (
-                <strong className="text-foreground">{owner.company}</strong>
+    <Card className="gap-6 rounded-[32px] bg-white p-9 shadow-[0_24px_64px_rgba(120,90,40,0.12)] ring-0">
+      {copy.badge ? (
+        <Badge className="h-auto self-start rounded-full border-success-line bg-success-bg px-3 py-[5px] font-bold tracking-[0.08em] text-success uppercase">
+          {copy.badge}
+        </Badge>
+      ) : null}
+
+      <div className="flex flex-col gap-2.5">
+        <h1 className="text-4xl font-extrabold tracking-[-0.035em]">
+          {copy.title}
+        </h1>
+        <p className="text-base leading-relaxed text-ink-soft">
+          {copy.description}
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        aria-label={mode === "define" ? "Definir contraseña" : "Restablecer contraseña"}
+        className="flex flex-col gap-4"
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="email" className="font-semibold">
+            Correo
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            value={ACCOUNT.email}
+            readOnly
+            autoComplete="email"
+            className="h-14 rounded-[14px] border-paper-line bg-paper-field px-4 text-ink-soft focus-visible:ring-0 md:text-base"
+          />
+        </div>
+
+        <PasswordField
+          id="password"
+          label="Nueva contraseña"
+          value={password}
+          onChange={setPassword}
+        />
+
+        <StrengthMeter password={password} />
+
+        <ul
+          id="password-rules"
+          className="flex flex-col gap-2 rounded-[16px] bg-paper px-4 py-3.5 text-sm"
+        >
+          {rules.map((rule) => (
+            <li key={rule.label} className="flex items-center gap-2.5">
+              {rule.ok ? (
+                <CheckIcon className="size-4 shrink-0 text-success" />
               ) : (
-                "Tu empresa"
-              )}{" "}
-              ya tiene su cuenta. Definí tu contraseña para ingresar.
-            </>
-          ) : (
-            <>
-              Elegí una contraseña nueva para{" "}
-              {owner?.email ? (
-                <strong className="text-foreground">{owner.email}</strong>
-              ) : (
-                "tu cuenta"
+                <CircleIcon className="size-4 shrink-0 text-ink-soft" />
               )}
-              .
-            </>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {error ? (
-            <Alert variant="destructive">
-              <CircleAlertIcon />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <PasswordField
-            id="password"
-            label="Nueva contraseña"
-            value={password}
-            onChange={setPassword}
-          />
-          <PasswordField
-            id="confirmation"
-            label="Confirmar contraseña"
-            value={confirmation}
-            onChange={setConfirmation}
-          />
-
-          <ul id="password-rules" className="flex flex-col gap-1.5 text-sm">
-            {rules.map((rule) => (
-              <li
-                key={rule.label}
-                className={cn(
-                  "flex items-center gap-2",
-                  rule.ok ? "text-emerald-700" : "text-muted-foreground",
-                )}
-              >
-                {rule.ok ? (
-                  <CheckIcon className="size-4" />
-                ) : (
-                  <CircleIcon className="size-4" />
-                )}
+              <span className={rule.ok ? "text-ink" : "text-ink-soft"}>
                 {rule.label}
-              </li>
-            ))}
-          </ul>
+              </span>
+            </li>
+          ))}
+        </ul>
 
-          <Button
-            type="submit"
-            size="lg"
-            className="h-10"
-            disabled={pending || !allOk}
-          >
-            {pending && <Loader2Icon className="animate-spin" />}
-            {pending ? copy.pending : copy.cta}
-          </Button>
+        <PasswordField
+          id="confirmation"
+          label="Repetí la contraseña"
+          value={confirmation}
+          onChange={setConfirmation}
+        />
 
-          {mode === "reset" && <BackToLogin />}
-        </form>
-      </CardContent>
+        <Button
+          type="submit"
+          size="lg"
+          className="h-[56px] rounded-full px-6 text-base font-semibold shadow-[0_10px_24px_rgba(28,28,30,0.22)]"
+          disabled={!allOk}
+        >
+          {copy.cta}
+        </Button>
+      </form>
+
+      <p className="text-sm leading-relaxed text-ink-soft">{copy.footnote}</p>
     </Card>
-  );
+  )
 }
 
 function PasswordField({
@@ -321,15 +245,17 @@ function PasswordField({
   value,
   onChange,
 }: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
 }) {
-  const [shown, setShown] = React.useState(false);
+  const [shown, setShown] = React.useState(false)
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className="font-semibold">
+        {label}
+      </Label>
       <div className="relative">
         <Input
           id={id}
@@ -339,13 +265,13 @@ function PasswordField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-describedby="password-rules"
-          className="h-10 pr-10"
+          className="h-14 rounded-[14px] border-paper-line bg-paper px-4 pr-11 focus-visible:ring-0 md:text-base"
         />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+          className="absolute top-1/2 right-2 -translate-y-1/2 text-ink-soft"
           onClick={() => setShown((value) => !value)}
           aria-label={shown ? "Ocultar contraseña" : "Mostrar contraseña"}
           aria-pressed={shown}
@@ -354,17 +280,28 @@ function PasswordField({
         </Button>
       </div>
     </div>
-  );
+  )
 }
 
-function BackToLogin() {
+function StrengthMeter({ password }: { password: string }) {
+  const score = strengthScore(password)
+  const level = STRENGTH[score]
   return (
-    <Link
-      href="/ingresar"
-      className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-    >
-      <ArrowLeftIcon className="size-4" />
-      Volver a ingresar
-    </Link>
-  );
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+        {[0, 1, 2, 3].map((index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-1.5 rounded-full",
+              index < score ? level.fill : "bg-paper-line",
+            )}
+          />
+        ))}
+      </div>
+      <span aria-live="polite" className={cn("text-sm font-semibold", level.tone)}>
+        Fortaleza: {level.label}
+      </span>
+    </div>
+  )
 }
