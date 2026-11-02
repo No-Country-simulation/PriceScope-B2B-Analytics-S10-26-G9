@@ -11,7 +11,7 @@ from app.api.v1.admin_scraping import get_scraping_http
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.main import app
-from app.models import Listing, Price, Store, StoreCategory, StoreLocation
+from app.models import Listing, Price, ScrapingRun, Store, StoreCategory, StoreLocation
 from app.services import scraping_rate_limit
 from app.services.scraping_lock import scrape_store_lock
 from app.services.scraping_rate_limit import throttle_scraping_request
@@ -201,6 +201,15 @@ async def test_success_saves_prices(
 
     assert listing_count == 1
     assert price_count == 1
+    async with SessionLocal() as db:
+        run = await db.scalar(select(ScrapingRun))
+
+    assert run is not None
+    assert run.status == "success"
+    assert run.finished_at is not None
+    assert run.products_received == 1
+    assert run.observations_saved == 1
+    assert run.error_code is None
 
 
 async def test_upstream_error_returns_502(
@@ -228,6 +237,14 @@ async def test_upstream_error_returns_502(
         price_count = await db.scalar(select(func.count()).select_from(Price))
 
     assert price_count == 0
+    async with SessionLocal() as db:
+        run = await db.scalar(select(ScrapingRun))
+
+    assert run is not None
+    assert run.status == "failed"
+    assert run.finished_at is not None
+    assert run.error_code == "VTEX_FETCH_ERROR"
+    assert run.observations_saved == 0
 
 
 async def test_category_mode_saves_prices(

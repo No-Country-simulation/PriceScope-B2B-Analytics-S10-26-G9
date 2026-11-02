@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Verified own seller IDs, configured per store.
     scraping_seller_ids: dict[str, list[str]] = Field(default_factory=dict)
 
+    # Enable scraping jobs executed by ARQ.
+    # Independent from manual administrative scraping.
+    scraping_jobs_enabled: bool = False
+
     # Security
     jwt_secret: str
     jwt_algorithm: str = "HS256"

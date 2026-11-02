@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -159,3 +160,29 @@ class ScrapeRegionalPreviewOutput(BaseModel):
     sellers: list[ScrapeSellerOutput]
     offers: list[ScrapeRegionalOfferOutput]
     offers_truncated: bool
+
+
+class ScrapeRunHistoryItemOutput(BaseModel):
+    id: uuid.UUID
+    store_slug: str
+    status: Literal["running", "success", "failed"]
+    search_mode: str
+    search_value: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    products_received: int
+    observations_saved: int
+    skipped_duplicates: int
+    error_code: str | None
+    error_message: str | None
+
+
+class ScrapeRunHistoryOutput(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[ScrapeRunHistoryItemOutput]
+
+
+class ScrapeRecoveryOutput(BaseModel):
+    recovered: int
