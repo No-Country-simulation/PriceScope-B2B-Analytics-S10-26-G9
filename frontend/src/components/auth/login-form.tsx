@@ -16,12 +16,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Turnstile } from "@/components/auth/turnstile"
 import { ApiError } from "@/lib/api"
 import { HOME_BY_ROLE, safeNextPath, useAuth } from "@/lib/auth"
 
 // Test account shown on the login page; the alert is hidden when unset.
 const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD
+// Cloudflare Turnstile site key; the challenge is skipped when unset.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
 export function LoginForm() {
   const router = useRouter()
@@ -32,6 +35,11 @@ export function LoginForm() {
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [invalid, setInvalid] = React.useState(false)
+  const [captchaToken, setCaptchaToken] = React.useState<string | null>(null)
+  // Bumped after a failed attempt to remount the widget: each token is
+  // single-use, so the next try needs a fresh challenge.
+  const [captchaKey, setCaptchaKey] = React.useState(0)
+  const captchaMissing = Boolean(TURNSTILE_SITE_KEY) && !captchaToken
 
   const next = safeNextPath(searchParams.get("next"))
   const sessionExpired =
@@ -46,6 +54,7 @@ export function LoginForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (captchaMissing) return
     const form = new FormData(event.currentTarget)
     setPending(true)
     setError(null)
@@ -63,6 +72,8 @@ export function LoginForm() {
         setError("No pudimos conectar con el servidor. Probá de nuevo.")
       }
       setPending(false)
+      setCaptchaToken(null)
+      setCaptchaKey((key) => key + 1)
     }
   }
 
@@ -154,7 +165,20 @@ export function LoginForm() {
         </div>
       </div>
 
-      <Button type="submit" size="lg" className="h-10" disabled={pending}>
+      {TURNSTILE_SITE_KEY ? (
+        <Turnstile
+          key={captchaKey}
+          siteKey={TURNSTILE_SITE_KEY}
+          onToken={setCaptchaToken}
+        />
+      ) : null}
+
+      <Button
+        type="submit"
+        size="lg"
+        className="h-10"
+        disabled={pending || captchaMissing}
+      >
         {pending && <Loader2Icon className="animate-spin" />}
         {pending ? "Ingresando…" : "Ingresar"}
       </Button>
