@@ -19,9 +19,6 @@ export function DemoHeader() {
       <Link href="/ingresar" className="btn">
         Ingresar
       </Link>
-      <Link href="/registro" className="btn p">
-        Crear cuenta
-      </Link>
     </header>
   );
 }

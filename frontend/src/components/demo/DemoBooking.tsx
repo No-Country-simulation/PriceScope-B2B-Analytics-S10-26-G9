@@ -255,9 +255,6 @@ export function DemoBooking() {
             <Link href="/" className="btn">
               Volver al inicio
             </Link>
-            <Link href="/registro" className="btn p">
-              Crear cuenta
-            </Link>
           </div>
         </div>
       )}

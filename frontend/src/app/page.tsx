@@ -51,11 +51,8 @@ export default function Home() {
           <Link href="/demo" className="rounded-lg border border-line px-4 py-2 text-[13.5px] font-medium text-ink transition-colors hover:bg-lilac">
             Ver demo
           </Link>
-          <Link href="/ingresar" className="rounded-lg border border-line px-4 py-2 text-[13.5px] font-medium text-ink transition-colors hover:bg-lilac">
+          <Link href="/ingresar" className="rounded-lg bg-brand px-4 py-2 text-[13.5px] font-medium text-white shadow-[0_8px_20px_-12px_rgba(74,91,219,.9)] transition-colors hover:bg-brand-deep">
             Ingresar
-          </Link>
-          <Link href="/registro" className="rounded-lg bg-brand px-4 py-2 text-[13.5px] font-medium text-white shadow-[0_8px_20px_-12px_rgba(74,91,219,.9)] transition-colors hover:bg-brand-deep">
-            Crear cuenta
           </Link>
         </nav>
       </header>
@@ -71,10 +68,7 @@ export default function Home() {
                 PriceScope es la herramienta de análisis de precios para equipos que necesitan tomar decisiones con datos confiables, no con índices distorsionados.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Link href="/registro" className="inline-flex min-h-[52px] items-center rounded-xl bg-white px-7 text-[15.5px] font-medium text-navy transition-colors hover:bg-[#E8EAFF]">
-                  Crear cuenta gratis
-                </Link>
-                <Link href="/demo" className="inline-flex min-h-[52px] items-center rounded-xl border border-line-dark px-7 text-[15.5px] font-medium text-white transition-colors hover:bg-[#1E2150]">
+                <Link href="/demo" className="inline-flex min-h-[52px] items-center rounded-xl bg-white px-7 text-[15.5px] font-medium text-navy transition-colors hover:bg-[#E8EAFF]">
                   Agendar demo
                 </Link>
               </div>
@@ -142,9 +136,6 @@ export default function Home() {
             <div className="mt-2 flex flex-wrap justify-center gap-4">
               <Link href="/demo" className="inline-flex min-h-[52px] items-center rounded-xl bg-brand px-7 text-[15.5px] font-medium text-white shadow-[0_12px_24px_-14px_rgba(74,91,219,.9)] transition-colors hover:bg-brand-deep">
                 Agendar demo
-              </Link>
-              <Link href="/registro" className="inline-flex min-h-[52px] items-center rounded-xl border border-line bg-white px-7 text-[15.5px] font-medium text-ink transition-colors hover:bg-[#F0F2FF]">
-                Crear cuenta
               </Link>
             </div>
           </div>

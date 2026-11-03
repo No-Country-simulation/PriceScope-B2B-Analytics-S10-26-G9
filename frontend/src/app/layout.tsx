@@ -10,7 +10,7 @@ const geist = Geist({
 });
 
 // Inter, Inter Tight and Newsreader are still used by the pages that predate
-// shadcn (/, /demo, /registro) until they are migrated.
+// shadcn (/, /demo) until they are migrated.
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
