@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Inter, Inter_Tight, Newsreader } from "next/font/google";
+import { Geist, Geist_Mono, Inter, Inter_Tight, Newsreader } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({
   variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+// Geist Mono es la tipografía de los números de la matriz (UX05).
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
@@ -41,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn(
         "h-full font-sans antialiased",
         geist.variable,
+        geistMono.variable,
         inter.variable,
         interTight.variable,
         newsreader.variable,
