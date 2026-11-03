@@ -1,13 +1,25 @@
 import Link from "next/link"
 
-// Frame shared by the screens opened from an email link (mockup 03b ·
-// Definir contraseña): warm paper backdrop, brand pill on top, card below.
-// The `.paper-link-screen` class scopes the mint focus ring in globals.css.
-export function CenteredShell({ children }: { children: React.ReactNode }) {
+import { cn } from "@/lib/utils"
+
+// Frame shared by the warm, paper-like screens (mockup 03b · Definir
+// contraseña and mockup 03 · Iniciar sesión): gradient backdrop, brand pill
+// on top, card below. The `.paper-link-screen` class scopes the mint focus
+// ring in globals.css. `cardClassName` narrows the card where the design
+// asks for it (460px on the login, 480px elsewhere).
+export function CenteredShell({
+  children,
+  cardClassName,
+}: {
+  children: React.ReactNode
+  cardClassName?: string
+}) {
   return (
     <div className="paper-link-screen flex min-h-svh w-full flex-col items-center gap-7 bg-[linear-gradient(180deg,#F5EEE2_0%,#FBF8F3_45%,#F7F6F3_100%)] px-4 py-14 font-[family-name:var(--font-inter)] text-ink">
       <BrandPill />
-      <div className="flex w-full max-w-lg flex-col">{children}</div>
+      <div className={cn("flex w-full max-w-lg flex-col", cardClassName)}>
+        {children}
+      </div>
     </div>
   )
 }

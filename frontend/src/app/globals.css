@@ -108,6 +108,14 @@ input:focus {
   border-color: #ece8e0;
 }
 
+/* UX05 · Matriz de precios: la tabla hace scroll en los dos ejes dentro de su
+   tarjeta. El contenedor de la tabla de shadcn es el único scrollport, así la
+   cabecera queda pegada arriba y la columna del producto a la izquierda. */
+.matrix-scroll [data-slot="table-container"] {
+  max-height: 760px;
+  overflow: auto;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
