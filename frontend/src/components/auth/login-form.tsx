@@ -84,7 +84,7 @@ export function LoginForm() {
           Ingresá a tu cuenta
         </h1>
         <p className="text-sm text-muted-foreground">
-          Usá el correo con el que te dimos de alta.
+          ¡Bienvenido de nuevo! 👋
         </p>
       </div>
 
