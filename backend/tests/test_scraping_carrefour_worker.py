@@ -196,9 +196,4 @@ async def test_carrefour_requires_configured_sellers(
     assert result == {"status": "not_configured"}
 
 
-def test_carrefour_has_no_automatic_schedule() -> None:
-    """The Carrefour job must not run periodically yet."""
 
-    scheduled_jobs = {job.name for job in tasks.WorkerSettings.cron_jobs}
-
-    assert "cron:scrape_carrefour" not in scheduled_jobs

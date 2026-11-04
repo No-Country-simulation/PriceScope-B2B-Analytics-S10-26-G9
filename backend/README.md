@@ -84,6 +84,91 @@ cotizaciones cada hora. Sin él, la API responde bien pero las tareas quedan enc
 se procesan: ningún correo (alta de usuario, reenvío de acceso, restablecer contraseña) llega a
 Mailpit. Al levantarlo, procesa lo que haya quedado en la cola.
 
+
+## Extracción diaria de supermercados
+
+PriceScope utiliza ARQ y Redis para programar extracciones
+controladas del catálogo de supermercados.
+
+### Tiendas y horarios
+
+| Tienda | Horario UTC | Horario Argentina |
+|---|---|---|
+| Carrefour | 09:00 | 06:00 |
+| Jumbo | 09:30 | 06:30 |
+
+La zona horaria del worker se configura explícitamente en UTC.
+
+### Requisitos
+
+- PostgreSQL/TimescaleDB disponible.
+- Redis disponible.
+- Migraciones aplicadas.
+- Worker ARQ en ejecución.
+- Tiendas y vendedores autorizados configurados.
+
+### Configuración
+
+Las extracciones automáticas están deshabilitadas por defecto.
+
+Para habilitarlas en un entorno autorizado:
+
+```dotenv
+SCRAPING_ENABLED=true
+SCRAPING_ALLOWED_STORES='["carrefour","jumbo"]'
+SCRAPING_SELLER_IDS='{"carrefour":["1"],"jumbo":["1"]}'
+SCRAPING_JOBS_ENABLED=true
+```
+
+Reiniciar el worker después de modificar la configuración.
+
+### Ejecutar el worker
+
+Desde `backend/`:
+
+```bash
+docker compose up -d
+uv run arq app.workers.tasks.WorkerSettings
+```
+
+El worker también procesa otras tareas existentes del proyecto.
+
+### Seguridad y comportamiento
+
+- Cada tienda utiliza una tarea independiente.
+- Solo se permiten dominios y vendedores autorizados.
+- Las ejecuciones utilizan bloqueos por tienda.
+- Los resultados se registran en `scraping_runs`.
+- Las tareas no realizan scraping al iniciar el worker.
+- Los trabajos no tienen reintentos automáticos.
+- Si la extracción programada está deshabilitada,
+  no se realizan solicitudes al supermercado.
+- Si el worker está apagado durante el horario previsto,
+  no se recupera automáticamente la ejecución perdida.
+
+### Alcance actual
+
+La extracción diaria utiliza una muestra controlada:
+
+- Término de búsqueda: `leche`.
+- Tamaño de página: 5 productos.
+- Máximo de páginas: 1.
+
+La extracción de múltiples categorías o del catálogo completo
+se implementará en una etapa posterior.
+
+### Pruebas
+
+```bash
+uv run pytest -v tests/test_scraping_daily_schedule.py
+uv run pytest -v tests/test_scraping_carrefour_worker.py
+uv run pytest -v tests/test_scraping_jumbo_worker.py
+```
+
+Los tests utilizan respuestas simuladas y no consultan
+los supermercados reales.
+
+
 ## Día a día
 
 Con los servicios de Docker arriba (`docker compose up -d`), dos terminales en `backend/`:

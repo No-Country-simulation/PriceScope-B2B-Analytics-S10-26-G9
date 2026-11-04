@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC
 
 import aiosmtplib
 import httpx
@@ -29,6 +30,11 @@ from app.services.scraping_runs import (
 log = logging.getLogger(__name__)
 
 MAX_TRIES = 5
+
+APPROVED_JOB_ORIGINS = {
+    "carrefour": "https://www.carrefour.com.ar",
+    "jumbo": "https://www.jumbo.com.ar",
+}
 
 
 async def startup(ctx: dict) -> None:
@@ -86,20 +92,27 @@ async def recover_scraping_runs(ctx: dict) -> int:
     return recovered
 
 
-async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
-    """Run one controlled Carrefour catalogue extraction."""
+async def scrape_approved_store(
+    ctx: dict,
+    store_slug: str,
+) -> dict[str, str | int]:
+    """Run a controlled VTEX scraping job for an approved store."""
 
-    # The worker must not scrape unless explicitly enabled.
+    expected_origin = APPROVED_JOB_ORIGINS.get(store_slug)
+
+    if expected_origin is None:
+        return {"status": "not_approved"}
+
     if (
         not settings.scraping_jobs_enabled
         or not settings.scraping_enabled
-        or "carrefour" not in settings.scraping_allowed_stores
+        or store_slug not in settings.scraping_allowed_stores
     ):
         return {"status": "disabled"}
 
     seller_ids = {
         seller_id.strip()
-        for seller_id in settings.scraping_seller_ids.get("carrefour", [])
+        for seller_id in settings.scraping_seller_ids.get(store_slug, [])
         if seller_id.strip()
     }
 
@@ -109,8 +122,8 @@ async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
     async with SessionLocal() as db:
         store = await db.scalar(
             select(Store).where(
-                Store.slug == "carrefour",
-                Store.base_url == "https://www.carrefour.com.ar",
+                Store.slug == store_slug,
+                Store.base_url == expected_origin,
                 Store.active.is_(True),
             )
         )
@@ -155,7 +168,8 @@ async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
                     )
 
                     log.warning(
-                        "Carrefour scraping failed: %s",
+                        "Scraping failed for %s: %s",
+                        store_slug,
                         error_code,
                     )
 
@@ -179,20 +193,63 @@ async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
             return {"status": "already_running"}
 
 
+async def scrape_carrefour(ctx: dict) -> dict[str, str | int]:
+    """Run a controlled Carrefour extraction."""
+    return await scrape_approved_store(ctx, "carrefour")
+
+
+async def scrape_jumbo(ctx: dict) -> dict[str, str | int]:
+    """Run a controlled Jumbo extraction."""
+    return await scrape_approved_store(ctx, "jumbo")
+
+
+
 class WorkerSettings:
     functions = [
         send_email,
         func(scrape_carrefour, max_tries=1),
+        func(scrape_jumbo, max_tries=1),
     ]
+
     cron_jobs = [
+        # Existing exchange-rate ingestion: hourly.
         cron(ingest_rates, minute=0),
+
+        # Existing scraping-run recovery: hourly.
         cron(
             recover_scraping_runs,
             minute=10,
             max_tries=1,
         ),
+
+        # Carrefour: every day at 09:00 UTC (06:00 Argentina).
+        cron(
+            scrape_carrefour,
+            hour=9,
+            minute=0,
+            second=0,
+            run_at_startup=False,
+            unique=True,
+            max_tries=1,
+        ),
+
+        # Jumbo: every day at 09:30 UTC (06:30 Argentina).
+        cron(
+            scrape_jumbo,
+            hour=9,
+            minute=30,
+            second=0,
+            run_at_startup=False,
+            unique=True,
+            max_tries=1,
+        ),
     ]
+
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = arq_settings
+
+    # Explicit timezone for all cron expressions.
+    timezone = UTC
+
     max_tries = MAX_TRIES
