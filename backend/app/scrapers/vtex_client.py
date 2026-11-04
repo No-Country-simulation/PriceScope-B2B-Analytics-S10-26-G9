@@ -12,8 +12,23 @@ USER_AGENT = "PriceScopeBot/0.1 (NoCountry academic project)"
 MAX_SEARCH_WINDOW = 2500
 
 
+
 class VtexFetchError(Exception):
     """Raised when a VTEX catalogue request fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        network_error: bool = False,
+        retry_after: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.network_error = network_error
+        self.retry_after = retry_after
+
 
 
 async def fetch_vtex_products(
@@ -94,11 +109,20 @@ async def fetch_vtex_products(
                 headers={"User-Agent": USER_AGENT},
                 timeout=15.0,
             )
+
         except httpx.RequestError as exc:
-            raise VtexFetchError(f"Network error: {type(exc).__name__}") from exc
+            raise VtexFetchError(
+                f"Network error: {type(exc).__name__}",
+                network_error=True,
+            ) from exc
 
         if response.status_code not in (200, 206):
-            raise VtexFetchError(f"Unexpected VTEX HTTP status: {response.status_code}")
+            raise VtexFetchError(
+                f"Unexpected VTEX HTTP status: {response.status_code}",
+                status_code=response.status_code,
+                retry_after=response.headers.get("Retry-After"),
+            )
+
 
         try:
             page_products = response.json()

@@ -22,6 +22,7 @@ from app.services.scraping_rate_limit import throttle_scraping_request
 from app.services.scraping_recovery import (
     recover_stale_scraping_runs,
 )
+from app.services.scraping_retry import should_retry_vtex_error
 from app.services.scraping_runs import (
     finish_scraping_run,
     start_scraping_run,
@@ -30,6 +31,8 @@ from app.services.scraping_runs import (
 log = logging.getLogger(__name__)
 
 MAX_TRIES = 5
+SCRAPING_MAX_TRIES = 3
+SCRAPING_RETRY_BASE_DELAY = 60
 
 APPROVED_JOB_ORIGINS = {
     "carrefour": "https://www.carrefour.com.ar",
@@ -167,13 +170,37 @@ async def scrape_approved_store(
                         error_message=error_message,
                     )
 
+
                     log.warning(
                         "Scraping failed for %s: %s",
                         store_slug,
                         error_code,
                     )
 
+                    if (
+                        isinstance(exc, VtexFetchError)
+                        and should_retry_vtex_error(exc)
+                    ):
+                        attempt = ctx.get("job_try", 1)
+
+                        if attempt < SCRAPING_MAX_TRIES:
+                            delay = SCRAPING_RETRY_BASE_DELAY * (
+                                2 ** (attempt - 1)
+                            )
+
+                            log.warning(
+                                "Scheduling retry for %s: "
+                                "attempt %s/%s, delay %ss",
+                                store_slug,
+                                attempt + 1,
+                                SCRAPING_MAX_TRIES,
+                                delay,
+                            )
+
+                            raise Retry(defer=delay) from exc
+
                     raise
+
 
                 await finish_scraping_run(
                     run_id,
@@ -207,8 +234,8 @@ async def scrape_jumbo(ctx: dict) -> dict[str, str | int]:
 class WorkerSettings:
     functions = [
         send_email,
-        func(scrape_carrefour, max_tries=1),
-        func(scrape_jumbo, max_tries=1),
+        func(scrape_carrefour, max_tries=SCRAPING_MAX_TRIES),
+        func(scrape_jumbo, max_tries=SCRAPING_MAX_TRIES),
     ]
 
     cron_jobs = [
@@ -230,7 +257,7 @@ class WorkerSettings:
             second=0,
             run_at_startup=False,
             unique=True,
-            max_tries=1,
+            max_tries=SCRAPING_MAX_TRIES,
         ),
 
         # Jumbo: every day at 09:30 UTC (06:30 Argentina).
@@ -241,7 +268,7 @@ class WorkerSettings:
             second=0,
             run_at_startup=False,
             unique=True,
-            max_tries=1,
+            max_tries=SCRAPING_MAX_TRIES,
         ),
     ]
 

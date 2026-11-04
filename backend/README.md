@@ -140,11 +140,27 @@ El worker también procesa otras tareas existentes del proyecto.
 - Las ejecuciones utilizan bloqueos por tienda.
 - Los resultados se registran en `scraping_runs`.
 - Las tareas no realizan scraping al iniciar el worker.
-- Los trabajos no tienen reintentos automáticos.
 - Si la extracción programada está deshabilitada,
   no se realizan solicitudes al supermercado.
 - Si el worker está apagado durante el horario previsto,
   no se recupera automáticamente la ejecución perdida.
+
+### Reintentos automáticos
+
+Las tareas programadas de Carrefour y Jumbo permiten hasta
+tres intentos totales ante fallos temporales.
+
+- Primer intento: ejecución normal.
+- Segundo intento: después de 60 segundos.
+- Tercer intento: después de 120 segundos.
+- No se reintentan automáticamente errores HTTP 429,
+  401, 403, 404 o respuestas JSON inválidas.
+- Cada intento iniciado queda registrado en `scraping_runs`.
+- Los reintentos se encuentran deshabilitados si
+  `SCRAPING_JOBS_ENABLED=false`.
+
+Los reintentos utilizan ARQ y Redis. No se aplican
+automáticamente a las solicitudes manuales desde Swagger.
 
 ### Alcance actual
 

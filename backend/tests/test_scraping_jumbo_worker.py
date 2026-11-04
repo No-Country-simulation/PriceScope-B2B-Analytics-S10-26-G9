@@ -139,4 +139,4 @@ def test_jumbo_is_registered_without_retries() -> None:
     ]
 
     assert len(registered) == 1
-    assert registered[0].max_tries == 1
+    assert registered[0].max_tries == 3

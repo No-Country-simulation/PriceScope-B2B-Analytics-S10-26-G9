@@ -135,7 +135,7 @@ async def test_carrefour_job_records_http_429(
     assert price_count == 0
 
 
-def test_carrefour_job_has_no_automatic_retries() -> None:
+def test_carrefour_job_allows_bounded_retries() -> None:
     registered = [
         job
         for job in tasks.WorkerSettings.functions
@@ -143,7 +143,7 @@ def test_carrefour_job_has_no_automatic_retries() -> None:
     ]
 
     assert len(registered) == 1
-    assert registered[0].max_tries == 1
+    assert registered[0].max_tries == 3
 
 
 @pytest.mark.parametrize(
