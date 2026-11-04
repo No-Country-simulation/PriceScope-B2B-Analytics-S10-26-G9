@@ -22,6 +22,16 @@ def positive_decimal(value: object) -> Decimal | None:
     return number
 
 
+def normalize_ean(value: object) -> str | None:
+    """Return a zero-padded GTIN-14, or None if the value is not a usable code."""
+    if not isinstance(value, str):
+        return None
+    code = value.strip()
+    if not (code.isascii() and code.isdigit() and 8 <= len(code) <= 14):
+        return None
+    return code.zfill(14)
+
+
 def parse_vtex_product(
     product: dict[str, Any],
     *,
@@ -81,6 +91,8 @@ def parse_vtex_product(
         if not sku_id or len(sku_id) > 120:
             continue
 
+        ean = normalize_ean(item.get("ean"))
+
         sellers = item.get("sellers")
         if not isinstance(sellers, list):
             continue
@@ -130,6 +142,7 @@ def parse_vtex_product(
                     available=available,
                     category=category,
                     unit=unit,
+                    ean=ean,
                 )
             )
 

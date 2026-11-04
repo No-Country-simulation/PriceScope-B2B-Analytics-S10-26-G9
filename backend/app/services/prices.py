@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Listing, Price, RateType, StoreLocation
+from app.models import CanonicalProduct, Listing, Price, RateType, StoreLocation
 from app.services import rates
 
 CENTS = Decimal("0.01")
@@ -29,6 +29,7 @@ class ScrapedObservation:
     grammage: Decimal | None = None
     unit: str | None = None
     location_id: uuid.UUID | None = None
+    ean: str | None = None
 
 
 async def record_observation(
@@ -65,23 +66,41 @@ async def record_observation(
     is_promo = strikethrough is not None and strikethrough > observation.current_price
     regular_price = strikethrough if is_promo else observation.current_price
 
+    canonical_id = None
+    if observation.ean is not None:
+        canonical_id = await db.scalar(
+            insert(CanonicalProduct)
+            .values(ean=observation.ean, name=observation.name)
+            .on_conflict_do_update(
+                index_elements=["ean"],
+                set_={"updated_at": func.now()},  # keeps the first-seen name
+            )
+            .returning(CanonicalProduct.id)
+        )
+
+    listing_values = {
+        "store_id": observation.store_id,
+        "external_code": observation.external_code,
+        "name": observation.name,
+        "url": observation.url,
+        "source_category": observation.category,
+        "canonical_product_id": canonical_id,
+    }
+    listing_update = {
+        "name": observation.name,
+        "url": observation.url,
+        "source_category": observation.category,
+        "updated_at": func.now(),
+    }
+    if canonical_id is not None:
+        listing_update["canonical_product_id"] = canonical_id
+
     listing_id = await db.scalar(
         insert(Listing)
-        .values(
-            store_id=observation.store_id,
-            external_code=observation.external_code,
-            name=observation.name,
-            url=observation.url,
-            source_category=observation.category,
-        )
+        .values(**listing_values)
         .on_conflict_do_update(
             index_elements=["store_id", "external_code"],
-            set_={
-                "name": observation.name,
-                "url": observation.url,
-                "source_category": observation.category,
-                "updated_at": func.now(),
-            },
+            set_=listing_update,
         )
         .returning(Listing.id)
     )
