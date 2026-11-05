@@ -55,15 +55,15 @@ export function LandingHeader() {
         </nav>
 
         <div className="flex flex-1 items-center justify-end gap-2">
-          <Button variant="ghost" className="hidden sm:inline-flex" nativeButton={false} render={<Link href="/ingresar" />}>
+          <Button variant="ghost" size="lg" className="hidden px-4 sm:inline-flex" nativeButton={false} render={<Link href="/ingresar" />}>
             Iniciar sesión
           </Button>
-          <Button nativeButton={false} render={<Link href="/demo" />}>
-            Agendar<span className="hidden sm:inline"> una llamada</span>
+          <Button size="lg" className="px-4" nativeButton={false} render={<Link href="/demo" />}>
+            Agendar<span className="hidden sm:inline">una llamada</span>
           </Button>
           <Sheet>
             <SheetTrigger
-              render={<Button variant="outline" size="icon" className="lg:hidden" aria-label="Abrir menú" />}
+              render={<Button variant="outline" size="icon-lg" className="lg:hidden" aria-label="Abrir menú" />}
             >
               <MenuIcon />
             </SheetTrigger>

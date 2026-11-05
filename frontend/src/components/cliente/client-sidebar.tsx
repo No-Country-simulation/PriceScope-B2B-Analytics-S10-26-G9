@@ -10,9 +10,10 @@ import {
   LayoutDashboardIcon,
   PackageIcon,
   PlusIcon,
+  ShieldCheckIcon,
 } from "lucide-react"
 
-import { AdminUserMenu } from "@/components/admin/admin-sidebar"
+import { AdminUserMenu, SwitchAppLink } from "@/components/admin/admin-sidebar"
 import {
   Sidebar,
   SidebarContent,
@@ -84,6 +85,13 @@ export function ClientSidebar({
         </React.Suspense>
       </SidebarContent>
       <SidebarFooter>
+        {user?.role === "admin" && (
+          <SwitchAppLink
+            href="/admin"
+            title="Ir al backoffice"
+            icon={ShieldCheckIcon}
+          />
+        )}
         {user ? (
           <AdminUserMenu user={user} />
         ) : (
