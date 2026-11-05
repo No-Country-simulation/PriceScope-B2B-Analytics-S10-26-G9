@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { CenteredShell } from "@/components/auth/centered-shell"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { SetPasswordForm } from "@/components/auth/set-password-form"
 
 export const metadata: Metadata = {
@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 // Landing page of the reset link sent by email (/restablecer/{token}).
 export default function RestablecerPage() {
   return (
-    <CenteredShell>
+    <AuthShell layout="centered">
       <Suspense>
         <SetPasswordForm mode="reset" />
       </Suspense>
-    </CenteredShell>
+    </AuthShell>
   )
 }

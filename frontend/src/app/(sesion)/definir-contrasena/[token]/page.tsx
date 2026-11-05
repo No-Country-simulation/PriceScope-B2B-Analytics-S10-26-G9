@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { CenteredShell } from "@/components/auth/centered-shell"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { SetPasswordForm } from "@/components/auth/set-password-form"
 
 export const metadata: Metadata = {
@@ -12,10 +12,10 @@ export const metadata: Metadata = {
 // (/definir-contrasena/{token}).
 export default function DefinirContrasenaPage() {
   return (
-    <CenteredShell>
+    <AuthShell layout="centered">
       <Suspense>
         <SetPasswordForm mode="define" />
       </Suspense>
-    </CenteredShell>
+    </AuthShell>
   )
 }

@@ -2,52 +2,43 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import {
+  ArrowLeftIcon,
   CheckIcon,
+  CircleAlertIcon,
   CircleCheckIcon,
   CircleIcon,
   EyeIcon,
   EyeOffIcon,
+  Loader2Icon,
+  LinkIcon,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ApiError, apiFetch, type TokenStatus, type TokenType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 // "define": first password, from the welcome email the admin triggers.
 // "reset": new password, from the link the user asked for in /recuperar.
 type Mode = "define" | "reset"
 
-// Account of the design reference (mockup 03b · Definir contraseña). This
-// screen is still a maqueta: the real name, company and email travel with
-// the welcome link.
-const ACCOUNT = {
-  name: "Lucía",
-  company: "Comercial del Sur S.A.",
-  email: "lucia@comercialdelsur.com",
+const TOKEN_TYPE: Record<Mode, TokenType> = {
+  define: "set_password",
+  reset: "reset_password",
 }
 
-type Copy = {
-  badge: string | null
-  title: string
-  description: React.ReactNode
-  cta: string
-  footnote: string
-  doneTitle: string
-  doneDescription: string
-}
-
-const COPY: Record<Mode, Copy> = {
+const COPY = {
   define: {
-    badge: "Cuenta creada",
-    title: `Bienvenida, ${ACCOUNT.name}`,
-    description: (
+    title: "Definí tu contraseña",
+    description: (company: string) => (
       <>
         El equipo de PriceScope creó tu cuenta para{" "}
-        <strong className="text-ink">{ACCOUNT.company}</strong>. Definí tu
+        <strong className="text-foreground">{company}</strong>. Elegí una
         contraseña para ingresar.
       </>
     ),
@@ -57,14 +48,15 @@ const COPY: Record<Mode, Copy> = {
     doneTitle: "Contraseña guardada",
     doneDescription:
       "Tu cuenta ya está activa. Ingresá con tu correo y la contraseña que elegiste.",
+    expiredDescription:
+      "Pedile uno nuevo al equipo de PriceScope para activar tu cuenta.",
   },
   reset: {
-    badge: null,
     title: "Restablecé tu contraseña",
-    description: (
+    description: (company: string) => (
       <>
-        Elegí una contraseña nueva para{" "}
-        <strong className="text-ink">{ACCOUNT.company}</strong>.
+        Elegí una contraseña nueva para tu cuenta de{" "}
+        <strong className="text-foreground">{company}</strong>.
       </>
     ),
     cta: "Guardar contraseña",
@@ -73,10 +65,11 @@ const COPY: Record<Mode, Copy> = {
     doneTitle: "Contraseña actualizada",
     doneDescription:
       "Tu contraseña quedó guardada. Ya podés ingresar con la nueva.",
+    expiredDescription: "Pedí un enlace nuevo para restablecer tu contraseña.",
   },
-}
+} satisfies Record<Mode, unknown>
 
-// Checklist under the fields. The submit stays disabled until all four pass.
+// Same rules the backend enforces. The submit stays disabled until all pass.
 function passwordRules(password: string, confirmation: string) {
   return [
     { label: "Mínimo 8 caracteres", ok: password.length >= 8 },
@@ -89,153 +82,282 @@ function passwordRules(password: string, confirmation: string) {
   ]
 }
 
-// Four segments: the three required rules plus a bonus one (a symbol, or a
-// password of 12+ characters). "Precios2026" from the mockup scores 3 → buena.
-const STRENGTH = [
-  { label: "muy débil", tone: "text-ink-soft", fill: "" },
-  { label: "débil", tone: "text-destructive", fill: "bg-destructive" },
-  { label: "regular", tone: "text-warning", fill: "bg-warning" },
-  { label: "buena", tone: "text-success", fill: "bg-success-fill" },
-  { label: "excelente", tone: "text-success", fill: "bg-success-fill" },
-]
-
-function strengthScore(password: string) {
-  let score = 0
-  if (password.length >= 8) score += 1
-  if (/[A-ZÁÉÍÓÚÑ]/.test(password)) score += 1
-  if (/[0-9]/.test(password)) score += 1
-  if (/[^A-Za-z0-9]/.test(password) || password.length >= 12) score += 1
-  return score
-}
+type LinkState =
+  | { state: "loading" }
+  | { state: "offline" }
+  | { state: "expired" | "invalid" }
+  | { state: "valid"; email: string; company: string }
 
 export function SetPasswordForm({ mode }: { mode: Mode }) {
+  const { token } = useParams<{ token: string }>()
   const copy = COPY[mode]
 
-  const [password, setPassword] = React.useState("")
-  const [confirmation, setConfirmation] = React.useState("")
+  const [link, setLink] = React.useState<LinkState>({ state: "loading" })
+  const [attempt, setAttempt] = React.useState(0)
   const [done, setDone] = React.useState(false)
 
-  const rules = passwordRules(password, confirmation)
-  const allOk = rules.every((rule) => rule.ok)
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!allOk) return
-    setDone(true)
-  }
+  // Check the link before showing the form, so an expired or used one says
+  // so up front instead of after the visitor typed a password.
+  React.useEffect(() => {
+    let cancelled = false
+    apiFetch<TokenStatus>("/auth/token/verify", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    })
+      .then((result): LinkState => {
+        // A welcome link opened as a reset one (or the reverse) is treated
+        // as invalid: the copy and the expiry on screen would be wrong.
+        if (result.status !== "valid" || result.type !== TOKEN_TYPE[mode]) {
+          return { state: result.status === "expired" ? "expired" : "invalid" }
+        }
+        return {
+          state: "valid",
+          email: result.email ?? "",
+          company: result.company ?? "",
+        }
+      })
+      // A malformed token fails validation (422): it's just an invalid link.
+      .catch((err): LinkState =>
+        err instanceof ApiError && err.status < 500
+          ? { state: "invalid" }
+          : { state: "offline" }
+      )
+      .then((next) => {
+        if (!cancelled) setLink(next)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, mode, attempt])
 
   if (done) {
     return (
-      <Card className="gap-6 rounded-[32px] bg-white p-9 shadow-[0_24px_64px_rgba(120,90,40,0.12)] ring-0">
-        <div className="flex flex-col items-center gap-6 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
-            <CircleCheckIcon className="size-6" />
-          </span>
-          <div className="flex flex-col gap-2.5">
-            <h1 className="text-4xl font-extrabold tracking-[-0.035em]">
-              {copy.doneTitle}
-            </h1>
-            <p className="text-base leading-relaxed text-ink-soft">
-              {copy.doneDescription}
-            </p>
-          </div>
-          <Link
-            href="/ingresar"
-            className={buttonVariants({
-              size: "lg",
-              className:
-                "h-[56px] w-full rounded-full px-6 text-base font-semibold shadow-[0_10px_24px_rgba(28,28,30,0.22)]",
-            })}
-          >
-            Ir a ingresar
-          </Link>
+      <div role="status" className="flex flex-col gap-5">
+        <span className="flex size-11 items-center justify-center rounded-full bg-muted">
+          <CircleCheckIcon className="size-5" />
+        </span>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {copy.doneTitle}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {copy.doneDescription}
+          </p>
         </div>
-      </Card>
+        <Link
+          href="/ingresar"
+          className={buttonVariants({ size: "lg", className: "h-10" })}
+        >
+          Ir a ingresar
+        </Link>
+      </div>
+    )
+  }
+
+  if (link.state === "loading") {
+    return (
+      <div aria-busy="true" className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    )
+  }
+
+  if (link.state === "offline") {
+    return (
+      <div className="flex flex-col gap-5">
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>
+            No pudimos conectar con el servidor. Probá de nuevo.
+          </AlertDescription>
+        </Alert>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-10"
+          onClick={() => {
+            setLink({ state: "loading" })
+            setAttempt((value) => value + 1)
+          }}
+        >
+          Reintentar
+        </Button>
+        <BackToLogin />
+      </div>
+    )
+  }
+
+  if (link.state !== "valid") {
+    return (
+      <div role="alert" className="flex flex-col gap-5">
+        <span className="flex size-11 items-center justify-center rounded-full bg-muted">
+          <LinkIcon className="size-5" />
+        </span>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {link.state === "expired"
+              ? "El enlace venció"
+              : "El enlace no es válido"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {link.state === "invalid" ? "Puede que ya se haya usado. " : null}
+            {copy.expiredDescription}
+          </p>
+        </div>
+        {mode === "reset" ? (
+          <Link
+            href="/recuperar"
+            className={buttonVariants({ size: "lg", className: "h-10" })}
+          >
+            Pedir un enlace nuevo
+          </Link>
+        ) : null}
+        <BackToLogin />
+      </div>
     )
   }
 
   return (
-    <Card className="gap-6 rounded-[32px] bg-white p-9 shadow-[0_24px_64px_rgba(120,90,40,0.12)] ring-0">
-      {copy.badge ? (
-        <Badge className="h-auto self-start rounded-full border-success-line bg-success-bg px-3 py-[5px] font-bold tracking-[0.08em] text-success uppercase">
-          {copy.badge}
-        </Badge>
-      ) : null}
+    <PasswordForm
+      mode={mode}
+      token={token}
+      email={link.email}
+      company={link.company}
+      onDone={() => setDone(true)}
+    />
+  )
+}
 
-      <div className="flex flex-col gap-2.5">
-        <h1 className="text-4xl font-extrabold tracking-[-0.035em]">
-          {copy.title}
-        </h1>
-        <p className="text-base leading-relaxed text-ink-soft">
-          {copy.description}
+function PasswordForm({
+  mode,
+  token,
+  email,
+  company,
+  onDone,
+}: {
+  mode: Mode
+  token: string
+  email: string
+  company: string
+  onDone: () => void
+}) {
+  const copy = COPY[mode]
+
+  const [password, setPassword] = React.useState("")
+  const [confirmation, setConfirmation] = React.useState("")
+  const [pending, setPending] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const rules = passwordRules(password, confirmation)
+  const allOk = rules.every((rule) => rule.ok)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!allOk) return
+    setPending(true)
+    setError(null)
+    try {
+      await apiFetch("/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ token, password }),
+      })
+      onDone()
+    } catch (err) {
+      if (err instanceof ApiError && err.status < 500) {
+        setError(err.message)
+      } else {
+        setError("No pudimos conectar con el servidor. Probá de nuevo.")
+      }
+      setPending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <p className="text-sm text-muted-foreground">
+          {copy.description(company)}
         </p>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        aria-label={mode === "define" ? "Definir contraseña" : "Restablecer contraseña"}
-        className="flex flex-col gap-4"
+      {error ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email">Correo</Label>
+        {/* Read-only, and named "username" so password managers file the
+            new password under the right account. */}
+        <Input
+          id="email"
+          name="username"
+          type="email"
+          autoComplete="username"
+          value={email}
+          readOnly
+          className="h-10 bg-muted text-muted-foreground"
+        />
+      </div>
+
+      <PasswordField
+        id="password"
+        label="Nueva contraseña"
+        value={password}
+        onChange={setPassword}
+      />
+
+      <ul
+        id="password-rules"
+        className="flex flex-col gap-1.5 rounded-lg border bg-muted/50 px-3 py-2.5 text-sm"
       >
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="email" className="font-semibold">
-            Correo
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            value={ACCOUNT.email}
-            readOnly
-            autoComplete="email"
-            className="h-14 rounded-[14px] border-paper-line bg-paper-field px-4 text-ink-soft focus-visible:ring-0 md:text-base"
-          />
-        </div>
-
-        <PasswordField
-          id="password"
-          label="Nueva contraseña"
-          value={password}
-          onChange={setPassword}
-        />
-
-        <StrengthMeter password={password} />
-
-        <ul
-          id="password-rules"
-          className="flex flex-col gap-2 rounded-[16px] bg-paper px-4 py-3.5 text-sm"
-        >
-          {rules.map((rule) => (
-            <li key={rule.label} className="flex items-center gap-2.5">
-              {rule.ok ? (
-                <CheckIcon className="size-4 shrink-0 text-success" />
-              ) : (
-                <CircleIcon className="size-4 shrink-0 text-ink-soft" />
+        {rules.map((rule) => (
+          <li key={rule.label} className="flex items-center gap-2">
+            {rule.ok ? (
+              <CheckIcon className="size-4 shrink-0 text-success" />
+            ) : (
+              <CircleIcon className="size-4 shrink-0 text-muted-foreground" />
+            )}
+            <span
+              className={cn(
+                rule.ok ? "text-foreground" : "text-muted-foreground"
               )}
-              <span className={rule.ok ? "text-ink" : "text-ink-soft"}>
-                {rule.label}
-              </span>
-            </li>
-          ))}
-        </ul>
+            >
+              {rule.label}
+            </span>
+          </li>
+        ))}
+      </ul>
 
-        <PasswordField
-          id="confirmation"
-          label="Repetí la contraseña"
-          value={confirmation}
-          onChange={setConfirmation}
-        />
+      <PasswordField
+        id="confirmation"
+        label="Repetí la contraseña"
+        value={confirmation}
+        onChange={setConfirmation}
+      />
 
-        <Button
-          type="submit"
-          size="lg"
-          className="h-[56px] rounded-full px-6 text-base font-semibold shadow-[0_10px_24px_rgba(28,28,30,0.22)]"
-          disabled={!allOk}
-        >
-          {copy.cta}
-        </Button>
-      </form>
+      <Button
+        type="submit"
+        size="lg"
+        className="h-10"
+        disabled={pending || !allOk}
+      >
+        {pending && <Loader2Icon className="animate-spin" />}
+        {pending ? "Guardando…" : copy.cta}
+      </Button>
 
-      <p className="text-sm leading-relaxed text-ink-soft">{copy.footnote}</p>
-    </Card>
+      <p className="text-sm text-muted-foreground">{copy.footnote}</p>
+    </form>
   )
 }
 
@@ -253,25 +375,24 @@ function PasswordField({
   const [shown, setShown] = React.useState(false)
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id} className="font-semibold">
-        {label}
-      </Label>
+      <Label htmlFor={id}>{label}</Label>
       <div className="relative">
         <Input
           id={id}
+          name={id}
           type={shown ? "text" : "password"}
           autoComplete="new-password"
           required
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-describedby="password-rules"
-          className="h-14 rounded-[14px] border-paper-line bg-paper px-4 pr-11 focus-visible:ring-0 md:text-base"
+          className="h-10 pr-10"
         />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="absolute top-1/2 right-2 -translate-y-1/2 text-ink-soft"
+          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
           onClick={() => setShown((value) => !value)}
           aria-label={shown ? "Ocultar contraseña" : "Mostrar contraseña"}
           aria-pressed={shown}
@@ -283,25 +404,14 @@ function PasswordField({
   )
 }
 
-function StrengthMeter({ password }: { password: string }) {
-  const score = strengthScore(password)
-  const level = STRENGTH[score]
+function BackToLogin() {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
-        {[0, 1, 2, 3].map((index) => (
-          <span
-            key={index}
-            className={cn(
-              "h-1.5 rounded-full",
-              index < score ? level.fill : "bg-paper-line",
-            )}
-          />
-        ))}
-      </div>
-      <span aria-live="polite" className={cn("text-sm font-semibold", level.tone)}>
-        Fortaleza: {level.label}
-      </span>
-    </div>
+    <Link
+      href="/ingresar"
+      className="flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+    >
+      <ArrowLeftIcon className="size-4" />
+      Volver a ingresar
+    </Link>
   )
 }
