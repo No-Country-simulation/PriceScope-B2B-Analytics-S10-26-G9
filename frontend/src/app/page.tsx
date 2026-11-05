@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Faq } from "@/components/landing/faq"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHeader } from "@/components/landing/landing-header"
+import { PalmSilhouette } from "@/components/landing/palm-silhouette"
 import { Team } from "@/components/landing/team"
 import { cn } from "@/lib/utils"
 
@@ -118,7 +119,10 @@ const kpis = [
 function Hero() {
   return (
     <section id="inicio">
-      <div className="mx-auto flex max-w-[1240px] flex-col items-center gap-6.5 border-x px-5 pt-20 text-center sm:px-8 sm:pt-26">
+      <div className="relative isolate mx-auto flex max-w-[1240px] flex-col items-center gap-6.5 overflow-hidden border-x px-5 pt-20 text-center sm:px-8 sm:pt-26">
+        {/* El PNG trae una palmera cortada en su borde izquierdo: ese borde va siempre contra el costado de la sección. */}
+        <PalmSilhouette className="-right-56 -z-10 h-[720px] -scale-x-100 opacity-20" />
+        <PalmSilhouette className="-left-44 -z-10 h-[580px] opacity-15" />
         <span className="inline-flex h-7.5 items-center gap-2 rounded-full border px-3 text-xs text-foreground/80">
           <span className="size-2 rounded-full bg-success-fill" aria-hidden="true" />
           Precios actualizados todos los días
@@ -135,7 +139,7 @@ function Hero() {
         <div
           role="img"
           aria-label="Vista previa: inflación en pesos contra dólar blue, últimos 180 días, datos de ejemplo"
-          className="-mb-px mt-10 w-full max-w-[1000px] overflow-hidden rounded-t-[14px] border text-left shadow-[0_8px_30px_rgba(9,9,11,.06)]"
+          className="-mb-px mt-10 w-full max-w-[1000px] overflow-hidden rounded-t-[14px] border bg-background text-left shadow-[0_8px_30px_rgba(9,9,11,.06)]"
         >
           <div className="grid border-b sm:grid-cols-3">
             {kpis.map((k) => (

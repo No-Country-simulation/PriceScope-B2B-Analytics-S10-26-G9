@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { DemoBooking } from "@/components/demo/DemoBooking"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHeader } from "@/components/landing/landing-header"
+import { PalmSilhouette } from "@/components/landing/palm-silhouette"
 
 export const metadata: Metadata = {
   title: "Agendar demo · PriceScope",
@@ -13,8 +14,10 @@ export default function DemoPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <LandingHeader />
       <main className="flex flex-1 flex-col">
-        <div className="mx-auto w-full max-w-[1240px] flex-1 border-x border-b px-5 py-12 sm:px-8 sm:py-16">
-          <div className="mx-auto w-full max-w-[860px]">
+        <div className="relative mx-auto w-full max-w-[1240px] flex-1 overflow-hidden border-x border-b px-5 py-12 sm:px-8 sm:py-20">
+          <PalmSilhouette className="-right-10 h-[110%] -scale-x-100 opacity-30" />
+          <PalmSilhouette className="-left-16 h-[75%] opacity-20" />
+          <div className="relative mx-auto w-full max-w-[860px]">
             <DemoBooking />
           </div>
         </div>

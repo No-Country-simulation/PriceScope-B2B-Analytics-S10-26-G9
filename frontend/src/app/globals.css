@@ -43,6 +43,18 @@
     }
   }
 
+  /* Vaivén de las palmeras en /demo. */
+  --animate-sway: sway 7s ease-in-out infinite;
+  @keyframes sway {
+    0%,
+    100% {
+      transform: rotate(-1.6deg);
+    }
+    50% {
+      transform: rotate(1.6deg);
+    }
+  }
+
   --font-serif: var(--font-newsreader);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
