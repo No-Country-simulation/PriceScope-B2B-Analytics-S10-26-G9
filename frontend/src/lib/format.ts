@@ -36,20 +36,21 @@ export function formatDate(iso: string) {
   return date.format(new Date(iso))
 }
 
+// Miles con punto, siempre, para que el HTML del server coincida con el del
+// browser (toLocaleString("es-AR") no es estable entre Node y Chromium).
+function groupThousands(digits: string) {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+}
+
 // Precios: ARS con miles separados por punto y USD con dos decimales, como en
 // la maqueta UX05.
 export function formatArs(value: number) {
-  return "$ " + Math.round(value).toLocaleString("es-AR")
+  return "$ " + groupThousands(String(Math.round(value)))
 }
 
 export function formatUsd(value: number, rate: number) {
-  return (
-    "US$ " +
-    (value / rate).toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  )
+  const [whole, cents] = (value / rate).toFixed(2).split(".")
+  return "US$ " + groupThousands(whole) + "," + cents
 }
 
 // Variación porcentual: "+12,4 %" o "−3,1 %" (signo menos tipográfico).

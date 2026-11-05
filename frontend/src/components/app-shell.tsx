@@ -37,8 +37,8 @@ import {
 import { formatArs } from "@/lib/format"
 import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
 
-// Navegación del app cliente (mockup UX05). Las rutas que todavía no existen
-// devuelven 404 hasta que se maqueten las pantallas restantes.
+// Navegación del app cliente (mockup). Las rutas ya tienen pantalla: ver el
+// README para el listado completo.
 type NavItem = {
   title: string
   url: string
@@ -91,7 +91,7 @@ export function AppShell({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6 md:h-[56px]">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <Separator orientation="vertical" className="h-4 data-vertical:self-auto" />
           <nav aria-label="Ruta" className="flex items-center gap-2 text-sm">

@@ -148,9 +148,17 @@ El backend también exige el rol de administrador en cada endpoint.
 
 ### App del cliente
 
-| URL | Archivo | Qué hay |
-|---|---|---|
-| `/dashboard` | [`app/dashboard/page.tsx`](src/app/dashboard/page.tsx) | Plantilla de dashboard de shadcn con datos de ejemplo (`data.json`). Todavía no está conectada a la API ni protegida por sesión. |
+Todas las pantallas del cliente son maquetas con datos de ejemplo: todavía no
+llaman a la API ni están protegidas por sesión. Usan [`app-shell.tsx`](src/components/app-shell.tsx)
+(sidebar + header con la cotización vigente).
+
+| URL | Archivo | UX | Qué hay |
+|---|---|---|---|
+| `/dashboard` | [`app/dashboard/page.tsx`](src/app/dashboard/page.tsx) | UX04 | Plantilla de dashboard de shadcn con datos de ejemplo (`data.json`). |
+| `/matriz` | [`app/matriz/page.tsx`](src/app/matriz/page.tsx) | UX05 | Matriz de precios por tienda ([`matriz-screen.tsx`](src/components/matriz/matriz-screen.tsx)). |
+| `/producto` | [`app/producto/page.tsx`](src/app/producto/page.tsx) | UX06 | Ficha de producto: KPIs, historial de precios y comparación por tienda ([`product-detail-screen.tsx`](src/components/producto/product-detail-screen.tsx)). |
+| `/alertas` | [`app/alertas/page.tsx`](src/app/alertas/page.tsx) | UX07 | Lista de alertas del mercado con filtros por tipo y estado ([`alerts-screen.tsx`](src/components/alertas/alerts-screen.tsx)). |
+| `/regla-nueva` | [`app/regla-nueva/page.tsx`](src/app/regla-nueva/page.tsx) | UX08 | Formulario para crear una regla de alerta ([`new-rule-screen.tsx`](src/components/regla/new-rule-screen.tsx)). |
 
 ## Componentes
 
@@ -160,3 +168,7 @@ El backend también exige el rol de administrador en cada endpoint.
   para una imagen). [`centered-shell.tsx`](src/components/auth/centered-shell.tsx) es la card
   centrada de las páginas a las que se llega desde un correo.
 - `src/components/admin/`: backoffice.
+- `src/components/matriz/`: matriz de precios (UX05).
+- `src/components/producto/`: ficha de producto (UX06).
+- `src/components/alertas/`: alertas del mercado (UX07).
+- `src/components/regla/`: creación de reglas de alerta (UX08).
