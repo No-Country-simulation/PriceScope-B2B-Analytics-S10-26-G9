@@ -157,7 +157,7 @@ function AdminNavMenu({ pathname }: { pathname: string | null }) {
   )
 }
 
-function AdminUserMenu({ user }: { user: CurrentUser }) {
+export function AdminUserMenu({ user }: { user: CurrentUser }) {
   const { isMobile } = useSidebar()
   const { logout } = useAuth()
 

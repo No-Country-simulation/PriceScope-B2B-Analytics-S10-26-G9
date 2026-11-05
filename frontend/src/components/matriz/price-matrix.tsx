@@ -3,19 +3,30 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-  CalendarDaysIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
   DownloadIcon,
+  PackageSearchIcon,
+  PercentIcon,
   SearchIcon,
   TagIcon,
   TriangleAlertIcon,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { PageHeader } from "@/components/admin/page-header"
+import { TablePagination } from "@/components/admin/table-pagination"
+import { IconTile, ToneBadge, type Tone } from "@/components/admin/tone"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -24,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -33,7 +43,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Tooltip,
   TooltipContent,
@@ -41,83 +50,99 @@ import {
 } from "@/components/ui/tooltip"
 import { downloadCsv } from "@/lib/csv"
 import { formatArs, formatPct, formatUsd } from "@/lib/format"
-import { QUOTES, type Quote } from "@/lib/quotes"
+import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
 
-import {
-  CATALOG_TOTAL_LABEL,
-  CATEGORIES,
-  PRODUCTS,
-  STORES,
-  type Product,
-} from "./data"
+import { CATEGORIES, PRODUCTS, STORES, type Product } from "./data"
 
-const PAGE_SIZE_OPTIONS = [
-  { value: "25", label: "25" },
-  { value: "50", label: "50" },
-]
+const PAGE_SIZES = [10, 20, 50]
 
-const CATEGORY_OPTIONS = [
-  { value: "all", label: "Todas" },
-  ...CATEGORIES.map((value) => ({ value, label: value })),
-]
-
-// Etiquetas de la maqueta: la referencia pinta la barata en verde, la cara en
-// rojo, la promo en violeta y la reduflación en ámbar.
-const TONES = {
-  down: "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]",
-  up: "border-[#fecaca] bg-[#fef2f2] text-[#b91c1c]",
-  promo: "border-[#ddd6fe] bg-[#f5f3ff] text-[#6d28d9]",
-  redu: "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-  muted: "border-[#f4f4f5] bg-[#f4f4f5] text-[#3f3f46]",
-} as const
-
-type Rank = keyof Pick<typeof TONES, "down" | "up">
+type Currency = "ARS" | "USD"
+type Signal = "all" | "promo" | "redu"
 type SortKey = "name" | "spread" | "var"
 
-type Cell = {
-  main: string
-  sub: string
-  bg: string
-  muted?: boolean
-  rank?: Rank
-  promo?: string
-  redu?: string
-  title?: string
-}
+const categoryItems = [
+  { label: "Todas", value: "all" },
+  ...CATEGORIES.map((value) => ({ label: value, value })),
+]
+
+const signalItems = [
+  { label: "Todas", value: "all" },
+  { label: "Con promo vigente", value: "promo" },
+  { label: "Con reduflación", value: "redu" },
+]
+
+const currencyItems = [
+  { label: "Pesos (ARS)", value: "ARS" },
+  { label: "Dólares (USD)", value: "USD" },
+]
+
+const quoteItems = (Object.keys(QUOTES) as Quote[]).map((value) => ({
+  label: `${QUOTE_LABEL[value]} · ${formatArs(QUOTES[value])}`,
+  value,
+}))
+
+const pageSizeItems = PAGE_SIZES.map((size) => ({
+  label: String(size),
+  value: String(size),
+}))
+
+// A var. over this threshold is flagged red; below it stays neutral.
+const HIGH_VARIATION = 8
+
+type Cell =
+  | { kind: "missing" }
+  | {
+      kind: "price"
+      main: string
+      sub: string
+      rank?: "cheap" | "expensive"
+      promo?: string
+      promoTitle?: string
+      redu?: string
+    }
 
 type Row = {
   product: Product
   cells: Cell[]
   spread: number | null
-  spreadLabel: string
-  varLabel: string
-  varTone: keyof typeof TONES
 }
 
-// Matriz de precios por tienda: toolbar de filtros, leyenda, tabla con las
-// columnas fijas y paginación. Maqueta local, sin llamadas a la API.
-export function PriceMatrix({
-  quote,
-  onQuoteChange,
-}: {
-  quote: Quote
-  onQuoteChange: (quote: Quote) => void
-}) {
-  const [query, setQuery] = React.useState("")
-  const [category, setCategory] = React.useState<string | null>(null)
-  const [currency, setCurrency] = React.useState<"ARS" | "USD">("ARS")
-  const [promoOnly, setPromoOnly] = React.useState(false)
-  const [reduOnly, setReducOnly] = React.useState(false)
+function spreadOf(product: Product) {
+  const values = product.p.filter((value): value is number => value != null)
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  return ((Math.max(...values) - min) / min) * 100
+}
+
+function formatSpread(spread: number | null) {
+  return spread == null ? "—" : spread.toFixed(1).replace(".", ",") + " %"
+}
+
+// Matriz de precios (UX05): the same product across the client's stores.
+// Same layout as the admin users panel: header, KPIs, then one card with
+// filters, toolbar, table and pagination.
+export function PriceMatrix() {
+  const [search, setSearch] = React.useState("")
+  const [category, setCategory] = React.useState("all")
+  const [signal, setSignal] = React.useState<Signal>("all")
+  const [currency, setCurrency] = React.useState<Currency>("ARS")
+  const [quote, setQuote] = React.useState<Quote>("blue")
   const [sort, setSort] = React.useState<SortKey>("var")
   const [page, setPage] = React.useState(1)
-  const [pageSize, setPageSize] = React.useState(25)
+  const [pageSize, setPageSize] = React.useState(PAGE_SIZES[0])
 
   const rate = QUOTES[quote]
+  const hasFilters = search !== "" || category !== "all" || signal !== "all"
 
   const rows = React.useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    const filtered = PRODUCTS.filter((product) => {
+    const needle = search.trim().toLowerCase()
+    const money = (value: number) =>
+      currency === "USD" ? formatUsd(value, rate) : formatArs(value)
+    const other = (value: number) =>
+      currency === "USD" ? formatArs(value) : formatUsd(value, rate)
+
+    const result: Row[] = PRODUCTS.filter((product) => {
       if (
         needle &&
         !product.name.toLowerCase().includes(needle) &&
@@ -125,100 +150,63 @@ export function PriceMatrix({
       ) {
         return false
       }
-      if (category && product.cat !== category) return false
-      if (promoOnly && !product.promo?.some(Boolean)) return false
-      if (reduOnly && !product.redu?.some(Boolean)) return false
+      if (category !== "all" && product.cat !== category) return false
+      if (signal === "promo" && !product.promo?.some(Boolean)) return false
+      if (signal === "redu" && !product.redu?.some(Boolean)) return false
       return true
-    })
+    }).map((product) => {
+      const values = product.p.filter((v): v is number => v != null)
+      const min = Math.min(...values)
+      const max = Math.max(...values)
+      const ranked = values.length > 1 && min !== max
 
-    const mapped: Row[] = filtered.map((product) => {
-      const values = product.p.filter((value): value is number => value != null)
-      const min = values.length > 0 ? Math.min(...values) : null
-      const max = values.length > 0 ? Math.max(...values) : null
-      const spread =
-        min != null && max != null && values.length > 1
-          ? ((max - min) / min) * 100
-          : null
-
-      const cells: Cell[] = product.p.map((price, store): Cell => {
-        if (price == null || min == null || max == null) {
-          return {
-            main: "Sin dato",
-            sub: "no publicado",
-            bg: "bg-[#fafafa]",
-            muted: true,
-            title: "Sin precio en esta tienda",
-          }
-        }
-
+      const cells = product.p.map((price, store): Cell => {
+        if (price == null) return { kind: "missing" }
         const promo = product.promo?.[store]
-        const redu = product.redu?.[store]
-        const cheap = price === min
-        const expensive = price === max
-
         return {
-          main: currency === "USD" ? formatUsd(price, rate) : formatArs(price),
-          sub: currency === "USD" ? formatArs(price) : formatUsd(price, rate),
-          bg: cheap
-            ? "bg-[#f0fdf4]"
-            : expensive
-              ? "bg-[#fef2f2]"
-              : "bg-background",
-          rank: cheap ? "down" : expensive ? "up" : undefined,
-          promo: promo
-            ? currency === "USD"
-              ? formatUsd(promo, rate)
-              : formatArs(promo)
-            : undefined,
-          redu: redu ?? undefined,
-          title: promo
+          kind: "price",
+          main: money(price),
+          sub: other(price),
+          rank: !ranked
+            ? undefined
+            : price === min
+              ? "cheap"
+              : price === max
+                ? "expensive"
+                : undefined,
+          promo: promo ? money(promo) : undefined,
+          promoTitle: promo
             ? `Precio regular ${formatArs(promo)} · promo vigente`
-            : redu
-              ? `Contenido anterior y actual: ${redu}`
-              : undefined,
+            : undefined,
+          redu: product.redu?.[store] ?? undefined,
         }
       })
 
-      return {
-        product,
-        cells,
-        spread,
-        spreadLabel:
-          spread == null ? "—" : spread.toFixed(1).replace(".", ",") + " %",
-        varLabel: "▲ " + formatPct(product.v),
-        varTone: product.v > 8 ? "up" : "muted",
-      }
+      return { product, cells, spread: spreadOf(product) }
     })
 
-    mapped.sort((a, b) => {
+    result.sort((a, b) => {
       if (sort === "name") return a.product.name.localeCompare(b.product.name)
       if (sort === "spread") return (b.spread ?? -1) - (a.spread ?? -1)
       return b.product.v - a.product.v
     })
+    return result
+  }, [search, category, signal, currency, rate, sort])
 
-    return mapped
-  }, [query, category, promoOnly, reduOnly, currency, rate, sort])
-
-  // Cambiar un filtro vuelve a la primera página: el estado de página se
-  // resetea en cada handler, no en un efecto.
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   const currentPage = Math.min(page, pages)
-  const visible = rows.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  )
+  const visible = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   function clearFilters() {
-    setQuery("")
-    setCategory(null)
-    setPromoOnly(false)
-    setReducOnly(false)
+    setSearch("")
+    setCategory("all")
+    setSignal("all")
     setPage(1)
   }
 
   function exportCsv() {
     downloadCsv(
-      "matriz-de-precios.csv",
+      `matriz-de-precios-${new Date().toISOString().slice(0, 10)}.csv`,
       ["Producto", "Categoría", "Formato", ...STORES, "Spread", "Var. 30 d"],
       rows.map((row) => [
         row.product.name,
@@ -227,341 +215,100 @@ export function PriceMatrix({
         ...row.product.p.map((price) =>
           price == null ? "Sin dato" : Math.round(price)
         ),
-        row.spreadLabel,
-        row.varLabel,
+        formatSpread(row.spread),
+        formatPct(row.product.v),
       ])
     )
   }
 
   return (
-    <div className="flex w-full max-w-[1280px] flex-col gap-4 p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-[24px] font-semibold tracking-tight">
-            Matriz de precios
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            El mismo producto en tus tiendas.{" "}
-            {CATALOG_TOTAL_LABEL} productos canónicos ·{" "}
-            {STORES.length} tiendas asignadas.
-          </p>
-        </div>
-        <Button variant="outline" className="h-9" onClick={exportCsv}>
-          <DownloadIcon data-icon="inline-start" />
-          Exportar CSV
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title="Matriz de precios"
+        description={`El mismo producto en tus ${STORES.length} tiendas asignadas.`}
+        badge={
+          <ToneBadge tone="neutral" className="font-mono">
+            {QUOTE_LABEL[quote]} {formatArs(rate)}
+          </ToneBadge>
+        }
+      />
 
-      <Card className="flex flex-row flex-wrap items-center gap-2.5 rounded-[12px] border border-border px-3 py-2.5 shadow-[0_1px_2px_rgba(9,9,11,0.05)] ring-0">
-        <div className="relative min-w-[260px] max-w-[360px] flex-1">
-          <label htmlFor="matrix-search" className="sr-only">
-            Buscar producto
-          </label>
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            id="matrix-search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
+      <MatrixKpis />
+
+      <Card className="gap-0 py-0 shadow-xs">
+        <div className="grid gap-4 border-b p-(--card-spacing) sm:grid-cols-2 lg:grid-cols-4">
+          <FilterSelect
+            id="matrix-category"
+            label="Categoría"
+            items={categoryItems}
+            value={category}
+            onChange={(value) => {
+              setCategory(value)
               setPage(1)
             }}
-            placeholder="Buscar producto…"
-            className="h-9 pl-[34px]"
+          />
+          <FilterSelect
+            id="matrix-signal"
+            label="Señales"
+            items={signalItems}
+            value={signal}
+            onChange={(value) => {
+              setSignal(value as Signal)
+              setPage(1)
+            }}
+          />
+          <FilterSelect
+            id="matrix-currency"
+            label="Moneda"
+            items={currencyItems}
+            value={currency}
+            onChange={(value) => setCurrency(value as Currency)}
+          />
+          <FilterSelect
+            id="matrix-quote"
+            label="Cotización"
+            items={quoteItems}
+            value={quote}
+            onChange={(value) => setQuote(value as Quote)}
           />
         </div>
 
-        <Button variant="outline" size="sm" className="h-8" type="button">
-          <CalendarDaysIcon data-icon="inline-start" />
-          Últimos 30 días
-        </Button>
-
-        <Select
-          items={CATEGORY_OPTIONS}
-          value={category ?? "all"}
-          onValueChange={(value) => {
-            if (!value) return
-            setCategory(value === "all" ? null : value)
-            setPage(1)
-          }}
-        >
-          <SelectTrigger
-            aria-label="Categorías"
-            className="h-8 w-auto gap-1.5"
-          >
-            Categorías
-            <Badge
-              variant="secondary"
-              className="h-5 rounded-md px-1.5 font-normal"
-            >
-              {category ?? "Todas"}
-            </Badge>
-          </SelectTrigger>
-          <SelectContent align="start">
-            <SelectGroup>
-              {CATEGORY_OPTIONS.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-
-        <ToggleGroup
-          aria-label="Moneda"
-          multiple={false}
-          value={[currency]}
-          onValueChange={(next) => {
-            if (next[0]) setCurrency(next[0] as "ARS" | "USD")
-          }}
-          className="rounded-[9px] bg-[#f4f4f5] p-[3px]"
-        >
-          <ToggleGroupItem
-            value="ARS"
-            className="h-7 rounded-md px-2.5 text-xs aria-pressed:bg-background aria-pressed:shadow-sm"
-          >
-            ARS
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="USD"
-            className="h-7 rounded-md px-2.5 text-xs aria-pressed:bg-background aria-pressed:shadow-sm"
-          >
-            USD
-          </ToggleGroupItem>
-        </ToggleGroup>
-
-        <ToggleGroup
-          aria-label="Cotización"
-          multiple={false}
-          value={[quote]}
-          onValueChange={(next) => {
-            if (next[0]) onQuoteChange(next[0] as Quote)
-          }}
-          className="rounded-[9px] bg-[#f4f4f5] p-[3px]"
-        >
-          <ToggleGroupItem
-            value="oficial"
-            className="h-7 rounded-md px-2.5 text-xs aria-pressed:bg-background aria-pressed:shadow-sm"
-          >
-            Oficial
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="blue"
-            className="h-7 rounded-md px-2.5 text-xs aria-pressed:bg-background aria-pressed:shadow-sm"
-          >
-            Blue
-          </ToggleGroupItem>
-        </ToggleGroup>
-
-        <Separator
-          orientation="vertical"
-          className="h-6 data-vertical:self-auto"
-        />
-
-        <Button
-          variant={promoOnly ? "default" : "outline"}
-          size="sm"
-          className="h-8"
-          aria-pressed={promoOnly}
-          onClick={() => {
-            setPromoOnly((value) => !value)
-            setPage(1)
-          }}
-        >
-          <TagIcon data-icon="inline-start" />
-          Solo con promo
-        </Button>
-        <Button
-          variant={reduOnly ? "default" : "outline"}
-          size="sm"
-          className="h-8"
-          aria-pressed={reduOnly}
-          onClick={() => {
-            setReducOnly((value) => !value)
-            setPage(1)
-          }}
-        >
-          <TriangleAlertIcon data-icon="inline-start" />
-          Solo con reduflación
-        </Button>
-      </Card>
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#3f3f46]">
-        <span className="font-medium">Referencias:</span>
-        <Badge variant="outline" className={cn("h-[22px] rounded-md", TONES.down)}>
-          ▼ más barato
-        </Badge>
-        <Badge variant="outline" className={cn("h-[22px] rounded-md", TONES.up)}>
-          ▲ más caro
-        </Badge>
-        <span className="flex items-center gap-1.5">
-          <Badge
-            variant="outline"
-            className={cn("h-[22px] rounded-md", TONES.promo)}
-          >
-            Promo
-          </Badge>
-          <span className="text-muted-foreground">
-            precio regular al pasar el cursor
-          </span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Badge
-            variant="outline"
-            className={cn("h-[22px] rounded-md", TONES.redu)}
-          >
-            Reduflación
-          </Badge>
-          <span className="text-muted-foreground">
-            cambió el contenido neto
-          </span>
-        </span>
-        <Badge
-          variant="outline"
-          className={cn("h-[22px] rounded-md", TONES.muted)}
-        >
-          Sin dato
-        </Badge>
-      </div>
-
-      <section className="overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_1px_2px_rgba(9,9,11,0.05)]">
-        <div className="matrix-scroll">
-            <Table
-            className="min-w-[1000px] table-fixed text-sm"
-            aria-label="Matriz de precios por tienda"
-          >
-            <TableHeader className="bg-[#fafafa] [&_th]:text-muted-foreground">
-              <TableRow className="hover:bg-transparent">
-                <TableHead
-                  aria-sort={sort === "name" ? "ascending" : "none"}
-                  className="sticky top-0 left-0 z-30 h-11 w-[260px] border-r border-border bg-[#fafafa] px-3"
-                >
-                  <HeaderSort
-                    label="Producto"
-                    active={sort === "name"}
-                    direction="asc"
-                    onClick={() => setSort("name")}
-                  />
-                </TableHead>
-                {STORES.map((store) => (
-                  <TableHead
-                    key={store}
-                    className="sticky top-0 z-20 h-11 min-w-[170px] bg-[#fafafa] px-3"
-                  >
-                    {store}
-                  </TableHead>
-                ))}
-                <TableHead
-                  aria-sort={sort === "spread" ? "descending" : "none"}
-                  className="sticky top-0 z-20 h-11 w-[100px] bg-[#fafafa] px-3 text-right"
-                >
-                  <HeaderSort
-                    label="Spread"
-                    active={sort === "spread"}
-                    direction="desc"
-                    onClick={() => setSort("spread")}
-                  />
-                </TableHead>
-                <TableHead
-                  aria-sort={sort === "var" ? "descending" : "none"}
-                  className="sticky top-0 z-20 h-11 w-[130px] bg-[#fafafa] px-3 text-right"
-                >
-                  <HeaderSort
-                    label="Var. 30 d"
-                    active={sort === "var"}
-                    direction="desc"
-                    onClick={() => setSort("var")}
-                  />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {visible.map((row) => (
-                <TableRow
-                  key={row.product.name}
-                  className="border-muted hover:bg-transparent"
-                >
-                  <TableCell className="sticky left-0 z-10 whitespace-normal border-r border-border bg-background px-3 py-2.5">
-                    <Link
-                      href="/producto"
-                      className="flex flex-col gap-0.5 underline-offset-3 hover:text-foreground"
-                    >
-                      <span className="font-medium underline decoration-[#d4d4d8]">
-                        {row.product.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {row.product.cat} · {row.product.size}
-                      </span>
-                    </Link>
-                  </TableCell>
-
-                  {row.cells.map((cell, index) => (
-                    <PriceCell key={STORES[index]} cell={cell} />
-                  ))}
-
-                  <TableCell className="px-3 text-right font-mono tabular-nums">
-                    {row.spreadLabel}
-                  </TableCell>
-                  <TableCell className="px-3 text-right">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "h-[22px] rounded-md font-mono",
-                        TONES[row.varTone]
-                      )}
-                    >
-                      {row.varLabel}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {rows.length === 0 && (
-            <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-              <SearchIcon className="size-7 text-muted-foreground" />
-              <span className="font-semibold">No encontramos «{query}»</span>
-              <span className="text-sm text-muted-foreground">
-                Probá con otro nombre o limpiá los filtros.
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 mt-1"
-                onClick={clearFilters}
-              >
-                Limpiar filtros
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-[13px]">
-          <span className="text-muted-foreground">
-            Mostrando {rows.length} de {CATALOG_TOTAL_LABEL} productos
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Filas por página</span>
+        <div className="flex flex-wrap items-center gap-2 border-b p-(--card-spacing)">
+          <div className="relative w-full sm:w-72">
+            <Label htmlFor="matrix-search" className="sr-only">
+              Buscar producto o categoría
+            </Label>
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="matrix-search"
+              type="search"
+              placeholder="Buscar producto o categoría"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
+              className="h-9 pl-8"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <Label htmlFor="matrix-page-size" className="sr-only">
+              Filas por página
+            </Label>
             <Select
-              items={PAGE_SIZE_OPTIONS}
+              items={pageSizeItems}
               value={String(pageSize)}
               onValueChange={(value) => {
-                if (!value) return
                 setPageSize(Number(value))
                 setPage(1)
               }}
             >
-              <SelectTrigger
-                aria-label="Filas por página"
-                className="h-8 w-[4.5rem]"
-              >
+              <SelectTrigger id="matrix-page-size" className="h-9! w-20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {PAGE_SIZE_OPTIONS.map((item) => (
+                  {pageSizeItems.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
                       {item.label}
                     </SelectItem>
@@ -571,35 +318,222 @@ export function PriceMatrix({
             </Select>
             <Button
               variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              aria-label="Página anterior"
-              disabled={currentPage <= 1}
-              onClick={() => setPage(currentPage - 1)}
+              size="lg"
+              onClick={exportCsv}
+              disabled={rows.length === 0}
             >
-              <ChevronLeftIcon />
-            </Button>
-            <span className="font-mono tabular-nums">
-              {currentPage} / {pages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              aria-label="Página siguiente"
-              disabled={currentPage >= pages}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              <ChevronRightIcon />
+              <DownloadIcon data-icon="inline-start" />
+              Exportar
             </Button>
           </div>
         </div>
-      </section>
+
+        <Legend />
+
+        <Table className="min-w-[960px]" aria-label="Matriz de precios por tienda">
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead
+                aria-sort={sort === "name" ? "ascending" : "none"}
+                className="sticky left-0 z-10 w-64 border-r bg-muted pl-(--card-spacing)"
+              >
+                <SortButton
+                  label="Producto"
+                  active={sort === "name"}
+                  direction="asc"
+                  onClick={() => setSort("name")}
+                />
+              </TableHead>
+              {STORES.map((store) => (
+                <TableHead key={store}>{store}</TableHead>
+              ))}
+              <TableHead
+                aria-sort={sort === "spread" ? "descending" : "none"}
+                className="text-right"
+              >
+                <SortButton
+                  label="Spread"
+                  active={sort === "spread"}
+                  direction="desc"
+                  onClick={() => setSort("spread")}
+                />
+              </TableHead>
+              <TableHead
+                aria-sort={sort === "var" ? "descending" : "none"}
+                className="pr-(--card-spacing) text-right"
+              >
+                <SortButton
+                  label="Var. 30 d"
+                  active={sort === "var"}
+                  direction="desc"
+                  onClick={() => setSort("var")}
+                />
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={STORES.length + 3} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <PackageSearchIcon className="size-6" />
+                    {hasFilters ? (
+                      <>
+                        <p>Ningún producto coincide con la búsqueda.</p>
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Limpiar filtros
+                        </Button>
+                      </>
+                    ) : (
+                      <p>Todavía no hay productos en tus tiendas.</p>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              visible.map((row) => (
+                <TableRow key={row.product.name} className="group/row">
+                  <TableCell className="sticky left-0 z-10 border-r bg-card py-3 pl-(--card-spacing) group-hover/row:bg-muted">
+                    <Link
+                      href="/user/producto"
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {row.product.name}
+                    </Link>
+                    <div className="text-muted-foreground">
+                      {row.product.cat} · {row.product.size}
+                    </div>
+                  </TableCell>
+                  {row.cells.map((cell, index) => (
+                    <PriceCell key={STORES[index]} cell={cell} />
+                  ))}
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatSpread(row.spread)}
+                  </TableCell>
+                  <TableCell className="pr-(--card-spacing) text-right">
+                    <ToneBadge
+                      tone={row.product.v > HIGH_VARIATION ? "red" : "neutral"}
+                      className="font-mono"
+                    >
+                      {row.product.v >= 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                      {formatPct(row.product.v)}
+                    </ToneBadge>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        <div className="border-t p-(--card-spacing)">
+          <TablePagination
+            page={currentPage}
+            size={pageSize}
+            total={rows.length}
+            noun={rows.length === 1 ? "producto" : "productos"}
+            onPageChange={setPage}
+          />
+        </div>
+      </Card>
+    </>
+  )
+}
+
+function PriceCell({ cell }: { cell: Cell }) {
+  if (cell.kind === "missing") {
+    return (
+      <TableCell className="py-3">
+        <ToneBadge tone="neutral">Sin dato</ToneBadge>
+      </TableCell>
+    )
+  }
+
+  return (
+    <TableCell
+      className={cn(
+        "py-3 align-top",
+        cell.rank === "cheap" && "bg-emerald-500/5",
+        cell.rank === "expensive" && "bg-red-500/5"
+      )}
+    >
+      <div className="font-mono font-medium tabular-nums">{cell.main}</div>
+      <div className="font-mono text-xs text-muted-foreground tabular-nums">
+        {cell.sub}
+      </div>
+      {(cell.rank || cell.promo || cell.redu) && (
+        <div className="flex flex-wrap gap-1 pt-1.5">
+          {cell.rank === "cheap" && (
+            <ToneBadge tone="emerald">
+              <ArrowDownIcon />
+              Más barato
+            </ToneBadge>
+          )}
+          {cell.rank === "expensive" && (
+            <ToneBadge tone="red">
+              <ArrowUpIcon />
+              Más caro
+            </ToneBadge>
+          )}
+          {cell.promo && (
+            <Tooltip>
+              <TooltipTrigger render={<span />}>
+                <ToneBadge tone="violet">
+                  <TagIcon />
+                  Promo · <s className="font-mono">{cell.promo}</s>
+                </ToneBadge>
+              </TooltipTrigger>
+              <TooltipContent>{cell.promoTitle}</TooltipContent>
+            </Tooltip>
+          )}
+          {cell.redu && (
+            <ToneBadge tone="amber">
+              <TriangleAlertIcon />
+              {cell.redu}
+            </ToneBadge>
+          )}
+        </div>
+      )}
+    </TableCell>
+  )
+}
+
+function Legend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-(--card-spacing) py-3 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">Referencias</span>
+      <span className="flex items-center gap-1.5">
+        <ToneBadge tone="emerald">
+          <ArrowDownIcon />
+          Más barato
+        </ToneBadge>
+        entre tus tiendas
+      </span>
+      <span className="flex items-center gap-1.5">
+        <ToneBadge tone="red">
+          <ArrowUpIcon />
+          Más caro
+        </ToneBadge>
+        entre tus tiendas
+      </span>
+      <span className="flex items-center gap-1.5">
+        <ToneBadge tone="violet">
+          <TagIcon />
+          Promo
+        </ToneBadge>
+        precio regular tachado
+      </span>
+      <span className="flex items-center gap-1.5">
+        <ToneBadge tone="amber">
+          <TriangleAlertIcon />
+          Reduflación
+        </ToneBadge>
+        cambió el contenido neto
+      </span>
     </div>
   )
 }
 
-function HeaderSort({
+function SortButton({
   label,
   active,
   direction,
@@ -610,80 +544,128 @@ function HeaderSort({
   direction: "asc" | "desc"
   onClick: () => void
 }) {
+  const Icon = !active
+    ? ArrowUpDownIcon
+    : direction === "asc"
+      ? ArrowUpIcon
+      : ArrowDownIcon
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 font-medium",
-        active && "text-foreground"
+        "-mx-2 font-medium",
+        active ? "text-foreground" : "text-muted-foreground"
       )}
     >
       {label}
-      <span aria-hidden="true" className="text-muted-foreground">
-        {active ? (direction === "asc" ? "↑" : "↓") : "↕"}
-      </span>
-    </button>
+      <Icon data-icon="inline-end" />
+    </Button>
   )
 }
 
-function PriceCell({ cell }: { cell: Cell }) {
-  const content = (
-    <div className="flex flex-col gap-0.5">
-      <span
-        className={cn(
-          "font-mono font-medium tabular-nums",
-          cell.muted && "text-muted-foreground"
-        )}
+function FilterSelect({
+  id,
+  label,
+  items,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  items: { label: string; value: string }[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Select
+        items={items}
+        value={value}
+        onValueChange={(next) => next && onChange(next)}
       >
-        {cell.main}
-      </span>
-      <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-        {cell.sub}
-      </span>
-      {(cell.rank || cell.promo || cell.redu) && (
-        <span className="flex flex-wrap gap-1 pt-0.5">
-          {cell.rank && (
-            <Badge
-              variant="outline"
-              className={cn("h-5 rounded-md px-1.5 text-[11px]", TONES[cell.rank])}
-            >
-              {cell.rank === "down" ? "▼ más barato" : "▲ más caro"}
-            </Badge>
-          )}
-          {cell.promo && (
-            <Badge
-              variant="outline"
-              className={cn("h-5 rounded-md px-1.5 text-[11px]", TONES.promo)}
-            >
-              Promo · <s className="font-mono tabular-nums">{cell.promo}</s>
-            </Badge>
-          )}
-          {cell.redu && (
-            <Badge
-              variant="outline"
-              className={cn("h-5 rounded-md px-1.5 text-[11px]", TONES.redu)}
-            >
-              Reduflación {cell.redu}
-            </Badge>
-          )}
-        </span>
-      )}
+        <SelectTrigger id={id} className="h-9! w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {items.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
     </div>
   )
+}
+
+// Counted from the sample catalogue; they move to the API with the data.
+function MatrixKpis() {
+  const spreads = PRODUCTS.map(spreadOf).filter(
+    (value): value is number => value != null
+  )
+  const avgSpread =
+    spreads.reduce((sum, value) => sum + value, 0) / Math.max(1, spreads.length)
+
+  const cards: {
+    label: string
+    value: string
+    hint: string
+    tone: Tone
+    icon: React.ReactNode
+  }[] = [
+    {
+      label: "Productos comparados",
+      value: String(PRODUCTS.length),
+      hint: `Con precio en al menos una de tus ${STORES.length} tiendas`,
+      tone: "brand",
+      icon: <PackageSearchIcon />,
+    },
+    {
+      label: "Spread promedio",
+      value: formatSpread(avgSpread),
+      hint: "Distancia entre la tienda más cara y la más barata",
+      tone: "sky",
+      icon: <PercentIcon />,
+    },
+    {
+      label: "Con promo vigente",
+      value: String(PRODUCTS.filter((p) => p.promo?.some(Boolean)).length),
+      hint: "En al menos una tienda",
+      tone: "violet",
+      icon: <TagIcon />,
+    },
+    {
+      label: "Con reduflación",
+      value: String(PRODUCTS.filter((p) => p.redu?.some(Boolean)).length),
+      hint: "Mismo precio o más, menos contenido",
+      tone: "amber",
+      icon: <TriangleAlertIcon />,
+    },
+  ]
 
   return (
-    <TableCell className={cn("whitespace-normal px-3 py-2.5", cell.bg)}>
-      {cell.title ? (
-        <Tooltip>
-          <TooltipTrigger className="block w-full text-left">
-            {content}
-          </TooltipTrigger>
-          <TooltipContent>{cell.title}</TooltipContent>
-        </Tooltip>
-      ) : (
-        content
-      )}
-    </TableCell>
+    <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      {cards.map((card) => (
+        <Card key={card.label} className="@container/card shadow-xs">
+          <CardHeader>
+            <CardDescription>{card.label}</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {card.value}
+            </CardTitle>
+            <CardAction>
+              <IconTile tone={card.tone}>{card.icon}</IconTile>
+            </CardAction>
+            <p className="col-span-full pt-1 text-sm text-muted-foreground">
+              {card.hint}
+            </p>
+          </CardHeader>
+        </Card>
+      ))}
+    </div>
   )
 }

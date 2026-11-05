@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Image from "next/image"
 import Link from "next/link"
 import {
   BellIcon,
@@ -110,12 +111,6 @@ function Icon({ icon: I }: { icon: LucideIcon }) {
 
 /* -------------------------------------------------------------------- hero */
 
-const kpis = [
-  { label: "Inflación en pesos", value: "+18,4 %", note: "últimos 180 días" },
-  { label: "Dólar blue", value: "+14,8 %", note: "$ 1.320 → $ 1.515", mono: true },
-  { label: "Inflación en dólares", value: "+3,1 %", note: "los precios le ganan al dólar", alert: true },
-]
-
 function Hero() {
   return (
     <section id="inicio">
@@ -136,57 +131,17 @@ function Hero() {
         </p>
         <CallButton />
 
-        <div
-          role="img"
-          aria-label="Vista previa: inflación en pesos contra dólar blue, últimos 180 días, datos de ejemplo"
-          className="-mb-px mt-10 w-full max-w-[1000px] overflow-hidden rounded-t-[14px] border bg-background text-left shadow-[0_8px_30px_rgba(9,9,11,.06)]"
-        >
-          <div className="grid border-b sm:grid-cols-3">
-            {kpis.map((k) => (
-              <div key={k.label} className="flex flex-col gap-1 border-t px-6 py-5.5 first:border-t-0 sm:border-t-0 sm:border-l sm:first:border-l-0">
-                <span className="text-xs text-muted-foreground">{k.label}</span>
-                <span className="font-mono text-2xl font-medium tracking-tight tabular-nums">{k.value}</span>
-                <span className={cn("text-xs", k.alert ? "text-red-700" : "text-muted-foreground", k.mono && "font-mono")}>
-                  {k.note}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="px-6 pt-5 pb-6">
-            <div className="mb-3 flex gap-4.5 text-xs text-foreground/70">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-0.5 w-2.5 bg-primary" />
-                Precios (ARS)
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-0.5 w-2.5 bg-zinc-400" />
-                Dólar blue
-              </span>
-            </div>
-            <svg viewBox="0 0 600 170" width="100%" height="200" preserveAspectRatio="none" aria-hidden="true">
-              {[40, 85, 130].map((y) => (
-                <line key={y} x1="0" y1={y} x2="600" y2={y} className="stroke-muted" />
-              ))}
-              <path
-                d="M0,160 L50,152 L100,146 L150,135 L200,128 L250,117 L300,108 L350,96 L400,84 L450,72 L500,58 L550,45 L600,32 L600,170 L0,170 Z"
-                className="fill-muted"
-              />
-              <path
-                d="M0,160 L50,158 L100,150 L150,148 L200,140 L250,138 L300,126 L350,121 L400,112 L450,106 L500,98 L550,90 L600,84"
-                fill="none"
-                className="stroke-zinc-400"
-                strokeWidth="2"
-                vectorEffect="non-scaling-stroke"
-              />
-              <path
-                d="M0,160 L50,152 L100,146 L150,135 L200,128 L250,117 L300,108 L350,96 L400,84 L450,72 L500,58 L550,45 L600,32"
-                fill="none"
-                className="stroke-primary"
-                strokeWidth="2"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-          </div>
+        <div className="-mb-px mt-10 w-full max-w-[1000px] overflow-hidden rounded-t-[14px] border bg-background shadow-[0_8px_30px_rgba(9,9,11,.06)]">
+          {/* Captura de la matriz de precios (/user/matriz) con datos de ejemplo. */}
+          <Image
+            src="/hero-matriz.png"
+            alt="Matriz de precios de PriceScope: el mismo producto en tres tiendas, con el más barato, el más caro, promos y reduflación marcados"
+            width={2940}
+            height={1554}
+            sizes="(min-width: 1060px) 1000px, 100vw"
+            preload
+            className="-mt-px h-auto w-full"
+          />
         </div>
       </div>
     </section>
