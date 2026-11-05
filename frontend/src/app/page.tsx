@@ -3,9 +3,6 @@ import Image from "next/image"
 import Link from "next/link"
 import {
   BellIcon,
-  ChartLineIcon,
-  ChartNoAxesColumnIncreasingIcon,
-  CircleDollarSignIcon,
   ClockIcon,
   Grid3x3Icon,
   ScaleIcon,
@@ -33,7 +30,7 @@ export default function Home() {
       <LandingHeader />
       <main className="flex flex-1 flex-col">
         <Hero />
-        <Marquee />
+        <LogoMarquee label="Tiendas que monitoreamos" items={stores} dark />
         <Problem />
         <Features />
         <HowItWorks />
@@ -46,7 +43,8 @@ export default function Home() {
           />
           <Team />
         </Section>
-        <Section id="faq" className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+        <LogoMarquee label="Tecnologías con las que construimos PriceScope" items={stack} />
+        <Section id="faq" tinted className="grid gap-10 lg:grid-cols-2 lg:gap-16">
           <SectionHeading
             eyebrow="Preguntas"
             title="Preguntas frecuentes"
@@ -63,10 +61,10 @@ export default function Home() {
 
 /* ------------------------------------------------------------------ layout */
 
-function Section({ id, className, children }: { id?: string; className?: string; children: React.ReactNode }) {
+function Section({ id, className, tinted, children }: { id?: string; className?: string; tinted?: boolean; children: React.ReactNode }) {
   return (
     <section id={id} className="scroll-mt-16">
-      <div className={cn("mx-auto max-w-[1240px] border-x border-b px-5 py-18 sm:px-8 sm:py-24", className)}>
+      <div className={cn("mx-auto max-w-[1240px] border-x border-b px-5 py-18 sm:px-8 sm:py-24", tinted && "bg-neutral-50 dark:bg-muted/40", className)}>
         {children}
       </div>
     </section>
@@ -150,36 +148,87 @@ function Hero() {
 
 /* ----------------------------------------------------------------- marquee */
 
-const measured: [LucideIcon, string][] = [
-  [TrendingUpIcon, "Inflación ARS"],
-  [CircleDollarSignIcon, "Inflación USD"],
-  [ChartLineIcon, "Devaluación"],
-  [ChartNoAxesColumnIncreasingIcon, "Picos por categoría"],
-  [Grid3x3Icon, "Spread entre tiendas"],
-  [TriangleAlertIcon, "Reduflación"],
-  [TagIcon, "Promociones"],
-  [ClockIcon, "Cotización con hora"],
+// Logos monocromos de Simple Icons en /public, usados como máscara para teñirlos de blanco.
+type Logo = { name: string; logo?: string }
+
+// Mercado Libre usa el ícono de Mercado Pago (mismo apretón de manos).
+// shortcut: Jumbo y Coto no están en Simple Icons; van solo con el nombre hasta tener su SVG.
+const stores: Logo[] = [
+  { name: "Mercado Libre", logo: "/stores/mercadolibre.svg" },
+  { name: "Jumbo" },
+  { name: "Carrefour", logo: "/stores/carrefour.svg" },
+  { name: "Adidas", logo: "/stores/adidas.svg" },
+  { name: "Nike", logo: "/stores/nike.svg" },
+  { name: "Coto" },
 ]
 
-function Marquee() {
+const stack: Logo[] = [
+  ["Next.js", "nextdotjs"],
+  ["React", "react"],
+  ["TypeScript", "typescript"],
+  ["Tailwind CSS", "tailwindcss"],
+  ["Python", "python"],
+  ["FastAPI", "fastapi"],
+  ["Pydantic", "pydantic"],
+  ["SQLAlchemy", "sqlalchemy"],
+  ["PostgreSQL", "postgresql"],
+  ["Redis", "redis"],
+  ["Docker", "docker"],
+  ["Jira", "jira"],
+  ["Discord", "discord"],
+  ["Figma", "figma"],
+  ["Claude", "claude"],
+].map(([name, slug]) => ({ name, logo: `/tech/${slug}.svg` }))
+
+// dark: cinta destacada (tiendas). Sin dark: cinta liviana y compacta, como la original (tecnologías).
+function LogoMarquee({ label, items, dark }: { label: string; items: Logo[]; dark?: boolean }) {
   return (
-    <section aria-label="Qué medimos">
-      <div className="group mx-auto max-w-[1240px] overflow-hidden border">
-        <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused] motion-reduce:animate-none">
-          {/* La lista va dos veces para que la cinta dé la vuelta sin salto. */}
-          {[false, true].map((copy) => (
-            <ul key={String(copy)} aria-hidden={copy || undefined} className="flex">
-              {measured.map(([I, label]) => (
-                <li
-                  key={label}
-                  className="flex items-center gap-2.5 border-r px-10 py-5 text-sm whitespace-nowrap text-foreground/80"
-                >
-                  <I className="size-[18px]" aria-hidden="true" />
-                  {label}
-                </li>
-              ))}
-            </ul>
-          ))}
+    <section aria-label={label}>
+      <div className={cn("mx-auto max-w-[1240px] border-x border-b", dark ? "bg-neutral-950 py-10" : "py-6")}>
+        {/* La cinta (con sus bordes) se desvanece hacia los costados. */}
+        <div
+          className={cn(
+            "group overflow-hidden border-y [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]",
+            dark && "border-white/15"
+          )}
+        >
+          {/* La duración fija el tiempo por vuelta, no la velocidad: la cinta liviana (~2300px) usa 55s
+              para ir a ~43px/s, igual que la del equipo (7 tarjetas de 244px en 40s). */}
+          <div
+            className={cn(
+              "flex w-max animate-marquee group-hover:[animation-play-state:paused] motion-reduce:animate-none",
+              !dark && "[animation-duration:55s]"
+            )}
+          >
+            {/* La lista va dos veces para que la cinta dé la vuelta sin salto. */}
+            {[false, true].map((copy) => (
+              <ul key={String(copy)} aria-hidden={copy || undefined} className="flex">
+                {items.map((item) => (
+                  <li
+                    key={item.name}
+                    className={cn(
+                      "flex items-center border-r whitespace-nowrap",
+                      dark
+                        ? "gap-3 border-white/15 px-12 py-5 text-base font-semibold text-white/80"
+                        : "gap-2.5 px-8 py-4 text-sm text-foreground/80"
+                    )}
+                  >
+                    {item.logo && (
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "[mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]",
+                          dark ? "size-7 bg-white/80" : "size-[18px] bg-foreground/80"
+                        )}
+                        style={{ maskImage: `url(${item.logo})` }}
+                      />
+                    )}
+                    {item.name}
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -206,12 +255,14 @@ function Rows({ items }: { items: { lead: React.ReactNode; title: string; text: 
 
 function Problem() {
   return (
-    <Section id="problema" className="grid gap-10 lg:grid-cols-2 lg:gap-16">
-      <SectionHeading
-        eyebrow="El problema"
-        title="Medir precios a mano ya no alcanza."
-        lead="En un mercado con el dólar en movimiento, un dato de hace tres días ya es viejo."
-      />
+    <Section id="problema" tinted className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+      <div className="max-w-md">
+        <SectionHeading
+          eyebrow="El problema"
+          title="Medir precios a mano ya no alcanza."
+          lead="En un mercado con el dólar en movimiento, un dato de hace tres días ya es viejo."
+        />
+      </div>
       <Rows
         items={[
           {
@@ -274,8 +325,8 @@ const steps = [
 
 function HowItWorks() {
   return (
-    <Section id="como" className="grid gap-10 lg:grid-cols-2 lg:gap-16">
-      <div className="flex flex-col items-start gap-6">
+    <Section id="como" tinted className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+      <div className="flex max-w-md flex-col items-start gap-6">
         <SectionHeading
           eyebrow="Cómo funciona"
           title="De la llamada a tu tablero en tres pasos."
@@ -301,14 +352,16 @@ function HowItWorks() {
 
 function ClosingCta() {
   return (
-    <Section className="flex flex-col items-center gap-5.5 text-center sm:py-26">
+    <Section className="relative isolate flex flex-col items-center gap-5.5 overflow-hidden bg-neutral-950 text-center text-white sm:py-26">
+      <PalmSilhouette className="-right-40 -z-10 h-[480px] -scale-x-100 opacity-45" />
+      <PalmSilhouette className="-left-32 -z-10 h-[420px] opacity-40" />
       <h2 className="max-w-[640px] text-2xl leading-tight font-semibold tracking-tight text-balance sm:text-3xl">
         Dejá de medir a mano. Empezá a ver la inflación real.
       </h2>
-      <p className="max-w-[520px] text-base leading-relaxed text-muted-foreground">
+      <p className="max-w-[520px] text-base leading-relaxed text-neutral-400">
         Una llamada de 30 minutos para conocer tu caso y armar tu tablero.
       </p>
-      <CallButton />
+      <CallButton className="bg-white text-neutral-950 hover:bg-neutral-200" />
     </Section>
   )
 }

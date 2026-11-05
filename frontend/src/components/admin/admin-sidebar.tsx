@@ -8,6 +8,7 @@ import {
   ChartNoAxesCombinedIcon,
   EllipsisVerticalIcon,
   InboxIcon,
+  LayoutDashboardIcon,
   ListChecksIcon,
   LogOutIcon,
   UsersIcon,
@@ -115,6 +116,13 @@ export function AdminSidebar({
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        {user?.role === "admin" && (
+          <SwitchAppLink
+            href="/user/dashboard"
+            title="Ir al dashboard"
+            icon={LayoutDashboardIcon}
+          />
+        )}
         {user ? (
           <AdminUserMenu user={user} />
         ) : (
@@ -130,6 +138,29 @@ export function AdminSidebar({
         )}
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+// Jump between the backoffice (/admin) and the client app (/user). Callers
+// only render it for admins.
+export function SwitchAppLink({
+  href,
+  title,
+  icon: Icon,
+}: {
+  href: string
+  title: string
+  icon: React.ComponentType
+}) {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton tooltip={title} render={<Link href={href} />}>
+          <Icon />
+          <span>{title}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   )
 }
 
