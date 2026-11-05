@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   BellIcon,
   Grid3X3Icon,
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/sidebar"
 import { formatArs } from "@/lib/format"
 import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
+import { SessionTimeoutDialog } from "@/components/auth/session-timeout-dialog"
 
 // Navegación del app cliente (mockup). Las rutas ya tienen pantalla: ver el
 // README para el listado completo.
@@ -76,6 +77,9 @@ const USER = {
 
 // Marco de las pantallas del app cliente: sidebar con las secciones del
 // producto, header con la ruta, la cotización vigente y el usuario.
+// Incluye el diálogo de sesión por vencer (UX03) tras inactividad.
+const IDLE_TIMEOUT_MS = 25 * 60 * 1000 // 25 min — ajustar para pruebas
+
 export function AppShell({
   section,
   title,
@@ -87,6 +91,24 @@ export function AppShell({
   quote: Quote
   children: React.ReactNode
 }) {
+  const [showTimeout, setShowTimeout] = React.useState(false)
+  const router = useRouter()
+
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    function reset() {
+      clearTimeout(timer)
+      timer = setTimeout(() => setShowTimeout(true), IDLE_TIMEOUT_MS)
+    }
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"]
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    reset()
+    return () => {
+      clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, reset))
+    }
+  }, [])
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -126,6 +148,15 @@ export function AppShell({
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
       </SidebarInset>
+      {showTimeout && (
+        <SessionTimeoutDialog
+          onExtend={() => setShowTimeout(false)}
+          onLogout={() => {
+            setShowTimeout(false)
+            router.push("/ingresar?motivo=sesion-vencida")
+          }}
+        />
+      )}
     </SidebarProvider>
   )
 }

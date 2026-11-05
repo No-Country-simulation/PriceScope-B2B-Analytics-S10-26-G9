@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { CenteredShell } from "@/components/auth/centered-shell"
+import { LoginShell } from "@/components/auth/login-shell"
 import { LoginForm } from "@/components/auth/login-form"
 
 export const metadata: Metadata = {
@@ -10,10 +10,10 @@ export const metadata: Metadata = {
 
 export default function IngresarPage() {
   return (
-    <CenteredShell cardClassName="max-w-[460px]">
+    <LoginShell>
       <Suspense>
         <LoginForm />
       </Suspense>
-    </CenteredShell>
+    </LoginShell>
   )
 }

@@ -11,7 +11,13 @@ export const metadata: Metadata = {
 // Landing page of the reset link sent by email (/restablecer/{token}).
 export default function RestablecerPage() {
   return (
-    <CenteredShell>
+    <CenteredShell
+      footer={
+        <p className="text-[13px] text-muted-foreground">
+          ¿Problemas? Escribinos a soporte@pricescope.example
+        </p>
+      }
+    >
       <Suspense>
         <SetPasswordForm mode="reset" />
       </Suspense>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { AuthShell } from "@/components/auth/auth-shell"
+import { CenteredShell } from "@/components/auth/centered-shell"
 import { RecoverForm } from "@/components/auth/recover-form"
 
 export const metadata: Metadata = {
@@ -8,9 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function RecuperarPage() {
-  return (
-    <AuthShell>
-      <RecoverForm />
-    </AuthShell>
-  )
+  return <CenteredShell><RecoverForm /></CenteredShell>
 }
