@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   BellIcon,
   Grid3X3Icon,
@@ -36,9 +36,10 @@ import {
 } from "@/components/ui/sidebar"
 import { formatArs } from "@/lib/format"
 import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
+import { SessionTimeoutDialog } from "@/components/auth/session-timeout-dialog"
 
-// Navegación del app cliente (mockup UX05). Las rutas que todavía no existen
-// devuelven 404 hasta que se maqueten las pantallas restantes.
+// Navegación del app cliente (mockup). Las rutas ya tienen pantalla: ver el
+// README para el listado completo.
 type NavItem = {
   title: string
   url: string
@@ -76,6 +77,9 @@ const USER = {
 
 // Marco de las pantallas del app cliente: sidebar con las secciones del
 // producto, header con la ruta, la cotización vigente y el usuario.
+// Incluye el diálogo de sesión por vencer (UX03) tras inactividad.
+const IDLE_TIMEOUT_MS = 25 * 60 * 1000 // 25 min — ajustar para pruebas
+
 export function AppShell({
   section,
   title,
@@ -87,11 +91,29 @@ export function AppShell({
   quote: Quote
   children: React.ReactNode
 }) {
+  const [showTimeout, setShowTimeout] = React.useState(false)
+  const router = useRouter()
+
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    function reset() {
+      clearTimeout(timer)
+      timer = setTimeout(() => setShowTimeout(true), IDLE_TIMEOUT_MS)
+    }
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"]
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    reset()
+    return () => {
+      clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, reset))
+    }
+  }, [])
+
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6 md:h-[56px]">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <Separator orientation="vertical" className="h-4 data-vertical:self-auto" />
           <nav aria-label="Ruta" className="flex items-center gap-2 text-sm">
@@ -126,6 +148,15 @@ export function AppShell({
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
       </SidebarInset>
+      {showTimeout && (
+        <SessionTimeoutDialog
+          onExtend={() => setShowTimeout(false)}
+          onLogout={() => {
+            setShowTimeout(false)
+            router.push("/ingresar?motivo=sesion-vencida")
+          }}
+        />
+      )}
     </SidebarProvider>
   )
 }

@@ -8,6 +8,10 @@ export const STORES = [
   "Mercado Norte",
 ] as const
 
+// Copy of the UX05 artboard: the sample table only has a dozen rows, but the
+// heading and the footer talk about the full catalogue.
+export const CATALOG_TOTAL_LABEL = "1.635"
+
 export type Product = {
   name: string
   cat: string
