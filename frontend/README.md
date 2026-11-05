@@ -1,174 +1,149 @@
 # PriceScope — Frontend
 
-Next.js (App Router) con [shadcn/ui](https://ui.shadcn.com) sobre Base UI y Tailwind CSS.
-Todos los comandos se ejecutan desde la carpeta `frontend/`.
+Next.js (App Router) + [shadcn/ui](https://ui.shadcn.com) sobre Base UI y Tailwind CSS.
 
-Prototipo de referencia de las pantallas:
-[PriceScope · Prototipo de pantallas](https://claude.ai/artifact/R5gtqkAMK2T9ckYYJTgUyK).
-Es una guía de contenido y estructura; la implementación usa los componentes de shadcn.
-
-## Requisitos
-
-- Node.js 20 o superior
-- [pnpm](https://pnpm.io/installation)
-- El backend corriendo (ver [`backend/README.md`](../backend/README.md))
-
-## 1. Crear el `.env.local`
-
-```bash
-cp .env.example .env.local
-```
-
-| Variable | Para qué sirve |
+| | |
 |---|---|
-| `BACKEND_URL` | Origen del backend. Por defecto `http://localhost:8000`. |
-| `NEXT_PUBLIC_DEMO_EMAIL` | Correo de la cuenta de prueba que se muestra en `/ingresar`. |
-| `NEXT_PUBLIC_DEMO_PASSWORD` | Contraseña de esa cuenta. |
+| Carpeta de trabajo | Todos los comandos se corren desde `frontend/` |
+| Prototipo de pantallas | [PriceScope · Prototipo de pantallas](https://claude.ai/artifact/R5gtqkAMK2T9ckYYJTgUyK) (guía de contenido; la implementación usa shadcn) |
+| Backend | [`backend/README.md`](../backend/README.md) |
 
-Si las dos `NEXT_PUBLIC_DEMO_*` están vacías, el aviso con la cuenta de prueba no aparece.
-Tienen que coincidir con el usuario creado con `python -m scripts.seed` en el backend
-(`SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`). Son datos ficticios: el proyecto es de estudio.
+## Inicio rápido
 
-Next lee estas variables al arrancar: después de cambiarlas, reiniciá `pnpm dev`.
+| Paso | Comando / acción | Nota |
+|---|---|---|
+| 1. Requisitos | Node.js 20+ y [pnpm](https://pnpm.io/installation) | |
+| 2. Variables | `cp .env.example .env.local` | Ver [Variables de entorno](#variables-de-entorno) |
+| 3. Dependencias | `pnpm install` | |
+| 4. Levantar | `pnpm dev` | Abrí <http://localhost:3000> |
 
-## 2. Configurar el backend para los enlaces de los correos
+El backend solo hace falta para las pantallas que llaman a la API (ver la columna **¿Sin backend?** en [Rutas](#rutas)).
 
-Los correos de bienvenida y de recuperación llevan un enlace a este frontend. En el `.env`
-del **backend**, `FRONTEND_URL` tiene que apuntar a donde corre Next:
+## Variables de entorno
 
-```bash
-FRONTEND_URL=http://localhost:3000
-```
+| Dónde | Variable | Para qué sirve |
+|---|---|---|
+| `frontend/.env.local` | `BACKEND_URL` | Origen del backend. Por defecto `http://localhost:8000` |
+| `frontend/.env.local` | `NEXT_PUBLIC_DEMO_EMAIL` | Correo de la cuenta de prueba que se muestra en `/ingresar` |
+| `frontend/.env.local` | `NEXT_PUBLIC_DEMO_PASSWORD` | Contraseña de esa cuenta |
+| `backend/.env` | `FRONTEND_URL` | Tiene que ser `http://localhost:3000` para que los enlaces de los correos abran este front |
 
-Si no, los enlaces apuntan a otro puerto y no abren las páginas de contraseña.
-
-## 3. Levantar el servidor de desarrollo
-
-```bash
-pnpm install
-pnpm dev
-```
-
-Abrí <http://localhost:3000>.
-
-Si una pantalla sigue mostrando una versión vieja aunque el código cambió, borrá la caché
-de Next y volvé a levantarlo:
-
-```bash
-rm -rf .next && pnpm dev
-```
-
-## Cómo habla con la API
-
-El navegador nunca llama al backend directo: pide a `/api/v1/*` en el mismo origen y
-[`next.config.ts`](next.config.ts) lo reescribe a `BACKEND_URL`. Así la cookie de refresco
-de la sesión es de primera parte y no hace falta configurar CORS.
-
-- [`src/lib/api.ts`](src/lib/api.ts): cliente tipado (`apiFetch`) y tipos de la API.
-- [`src/lib/auth.tsx`](src/lib/auth.tsx): `AuthProvider` y `useAuth` (sesión, login, logout,
-  refresco del token) y `HOME_BY_ROLE`, la pantalla de inicio de cada rol.
+| Regla | Detalle |
+|---|---|
+| Cuenta de prueba | Las `NEXT_PUBLIC_DEMO_*` tienen que coincidir con `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` del seed del backend (`python -m scripts.seed`). Si están vacías, el aviso no aparece |
+| Cambios | Next las lee al arrancar: reiniciá `pnpm dev` después de cambiarlas |
+| Datos | Son ficticios: el proyecto es de estudio |
 
 ## Rutas
 
-Las carpetas entre paréntesis, como `(sesion)`, son grupos de rutas: ordenan el código
-pero no aparecen en la URL. Todo lo que está dentro de `(sesion)` tiene acceso a la sesión
-del usuario por [`(sesion)/layout.tsx`](src/app/(sesion)/layout.tsx), que monta el
-`AuthProvider`.
+Las carpetas entre paréntesis, como `(sesion)`, son grupos de rutas: ordenan el código pero no aparecen en la URL.
+Todo lo que está dentro de `(sesion)` tiene acceso a la sesión mediante [`(sesion)/layout.tsx`](src/app/(sesion)/layout.tsx).
 
 ### Públicas
 
-| URL | Archivo | Qué hay |
-|---|---|---|
-| `/` | [`app/page.tsx`](src/app/page.tsx) | Landing: propuesta de valor y accesos a demo, ingresar y registro. |
-| `/demo` | [`app/demo/page.tsx`](src/app/demo/page.tsx) | Formulario para agendar una demo. |
-| `/registro` | [`app/registro/page.tsx`](src/app/registro/page.tsx) | Formulario de alta. Todavía no envía datos a la API. |
+| Ruta | Qué hay | ¿Sin backend? | Archivo |
+|---|---|---|---|
+| [`/`](http://localhost:3000/) | Landing: propuesta de valor, accesos a demo e ingresar | ✅ | [`app/page.tsx`](src/app/page.tsx) |
+| [`/demo`](http://localhost:3000/demo) | Formulario para agendar una demo | ✅ (se ve; enviar necesita API) | [`app/demo/page.tsx`](src/app/demo/page.tsx) |
 
-`/`, `/demo` y `/registro` son anteriores a shadcn y todavía usan sus propios estilos.
+`/` y `/demo` son anteriores a shadcn y todavía usan sus propios estilos.
 
 ### Acceso (login y contraseñas)
 
-| URL | Archivo | Qué hay |
-|---|---|---|
-| `/ingresar` | [`(sesion)/ingresar/page.tsx`](src/app/(sesion)/ingresar/page.tsx) | Login. |
-| `/recuperar` | [`app/recuperar/page.tsx`](src/app/recuperar/page.tsx) | "¿Olvidaste tu contraseña?": pide el correo para mandar el enlace. |
-| `/restablecer/[token]` | [`(sesion)/restablecer/[token]/page.tsx`](src/app/(sesion)/restablecer/[token]/page.tsx) | Nueva contraseña, desde el enlace del correo de recuperación. |
-| `/definir-contrasena/[token]` | [`(sesion)/definir-contrasena/[token]/page.tsx`](src/app/(sesion)/definir-contrasena/[token]/page.tsx) | Primera contraseña, desde el correo de bienvenida. |
-
-**`/ingresar`** ([`login-form.tsx`](src/components/auth/login-form.tsx))
-
-- Correo y contraseña (con botón para mostrarla). Llama a `POST /auth/login`.
-- Si hay cuenta de prueba configurada (ver paso 1), la muestra en un aviso arriba del formulario.
-- Muestra un error si las credenciales son incorrectas, y un aviso si se llegó por sesión
-  vencida (`?motivo=sesion-vencida`).
-- Al ingresar redirige a `?next=` si viene en la URL, o al inicio del rol: `/admin/solicitudes`
-  para administradores y `/dashboard` para clientes. Si ya hay sesión, redirige directo.
-- Enlaces a `/recuperar` y a `/demo`.
-
-**`/recuperar`** ([`recover-form.tsx`](src/components/auth/recover-form.tsx))
-
-- Pide el correo y llama a `POST /auth/recover`.
-- Después muestra "Revisá tu correo" con el correo ingresado. La API responde lo mismo
-  exista o no la cuenta, para no revelar qué correos están registrados.
-- El enlace del correo lleva a `/restablecer/{token}` y vence en 1 hora.
-
-**`/restablecer/[token]` y `/definir-contrasena/[token]`**
-([`set-password-form.tsx`](src/components/auth/set-password-form.tsx))
-
-Las dos usan el mismo formulario con distinto `mode`. Al abrirse llaman a
-`POST /auth/token/verify` para saber si el enlace sirve antes de pedir la contraseña.
-Piden la contraseña dos veces y muestran en vivo las reglas que exige la API
-(8 caracteres, una mayúscula, un número, que coincidan). Guardan con `POST /auth/password`.
-
-| | `/definir-contrasena` (`mode="define"`) | `/restablecer` (`mode="reset"`) |
-|---|---|---|
-| Cuándo llega | El admin crea el usuario y le llega el correo de bienvenida | El usuario pidió recuperar la contraseña en `/recuperar` |
-| Título | "Te damos la bienvenida a PriceScope" | "Restablecé tu contraseña" |
-| Muestra | El nombre de la empresa | El correo de la cuenta |
-| Al guardar | Inicia sesión y lleva al inicio del rol | "Contraseña actualizada" con botón a `/ingresar` |
-| Enlace vencido | Dura 72 horas; hay que pedir otro al equipo de PriceScope | Dura 1 hora; botón para pedir otro en `/recuperar` |
-
-En el primer acceso, si la contraseña se guardó pero el inicio de sesión automático falla,
-muestra "Contraseña guardada" con botón a `/ingresar` (el enlace ya no sirve para reintentar).
+| Ruta | Qué hay | ¿Sin backend? | Archivo |
+|---|---|---|---|
+| [`/ingresar`](http://localhost:3000/ingresar) | Login | ✅ (se ve; ingresar necesita API) | [`(sesion)/ingresar/page.tsx`](src/app/(sesion)/ingresar/page.tsx) |
+| [`/recuperar`](http://localhost:3000/recuperar) | "¿Olvidaste tu contraseña?": pide el correo | ✅ (se ve; enviar necesita API) | [`app/recuperar/page.tsx`](src/app/recuperar/page.tsx) |
+| `/restablecer/[token]` | Nueva contraseña, desde el correo de recuperación | ❌ verifica el token al abrir | [`(sesion)/restablecer/[token]/page.tsx`](src/app/(sesion)/restablecer/[token]/page.tsx) |
+| `/definir-contrasena/[token]` | Primera contraseña, desde el correo de bienvenida | ❌ verifica el token al abrir | [`(sesion)/definir-contrasena/[token]/page.tsx`](src/app/(sesion)/definir-contrasena/[token]/page.tsx) |
 
 ### Backoffice (solo administradores)
 
-Todo `/admin` pasa por [`admin/layout.tsx`](src/app/(sesion)/admin/layout.tsx), que usa
-[`admin-shell.tsx`](src/components/admin/admin-shell.tsx): barra lateral y control de
-acceso. Sin sesión manda a `/ingresar?next=…`; con sesión de cliente, al `/dashboard`.
-El backend también exige el rol de administrador en cada endpoint.
+| Ruta | Qué hay | ¿Sin backend? | Archivo |
+|---|---|---|---|
+| [`/admin`](http://localhost:3000/admin) | Redirige a `/admin/solicitudes` | — | [`admin/page.tsx`](src/app/(sesion)/admin/page.tsx) |
+| [`/admin/solicitudes`](http://localhost:3000/admin/solicitudes) | Solicitudes de demo recibidas | ❌ requiere sesión | [`demo-requests-panel.tsx`](src/components/admin/demo-requests-panel.tsx) |
+| [`/admin/usuarios`](http://localhost:3000/admin/usuarios) | Listado, búsqueda y alta de usuarios | ❌ requiere sesión | [`users-panel.tsx`](src/components/admin/users-panel.tsx) |
+| `/admin/usuarios/[id]` | Detalle: datos, acciones sobre la cuenta y tiendas vinculadas | ❌ requiere sesión | [`user-detail.tsx`](src/components/admin/user-detail.tsx) |
+| — | "Curaduría" y "Operación" (en la barra lateral) | Sin página todavía | [`admin-sidebar.tsx`](src/components/admin/admin-sidebar.tsx) |
 
-| URL | Archivo | Qué hay |
-|---|---|---|
-| `/admin` | [`admin/page.tsx`](src/app/(sesion)/admin/page.tsx) | Redirige a `/admin/solicitudes`. |
-| `/admin/solicitudes` | [`admin/solicitudes/page.tsx`](src/app/(sesion)/admin/solicitudes/page.tsx) | Solicitudes de demo recibidas ([`demo-requests-panel.tsx`](src/components/admin/demo-requests-panel.tsx)). |
-| `/admin/usuarios` | [`admin/usuarios/page.tsx`](src/app/(sesion)/admin/usuarios/page.tsx) | Listado y búsqueda de usuarios, y alta de usuarios ([`users-panel.tsx`](src/components/admin/users-panel.tsx)). |
-| `/admin/usuarios/[id]` | [`admin/usuarios/[id]/page.tsx`](src/app/(sesion)/admin/usuarios/[id]/page.tsx) | Detalle de un usuario: datos, acciones sobre la cuenta y tiendas vinculadas ([`user-detail.tsx`](src/components/admin/user-detail.tsx)). |
-
-"Curaduría" y "Operación" aparecen en la barra lateral pero todavía no tienen página.
+| Control de acceso ([`admin-shell.tsx`](src/components/admin/admin-shell.tsx)) | Resultado |
+|---|---|
+| Sin sesión | Redirige a `/ingresar?next=…` |
+| Sesión de cliente | Redirige a `/dashboard` |
+| Sesión de admin | Entra. El backend también exige el rol en cada endpoint |
 
 ### App del cliente
 
-Todas las pantallas del cliente son maquetas con datos de ejemplo: todavía no
-llaman a la API ni están protegidas por sesión. Usan [`app-shell.tsx`](src/components/app-shell.tsx)
-(sidebar + header con la cotización vigente).
-
-| URL | Archivo | UX | Qué hay |
+| Ruta | Qué hay | ¿Sin backend? | Archivo |
 |---|---|---|---|
-| `/dashboard` | [`app/dashboard/page.tsx`](src/app/dashboard/page.tsx) | UX04 | Plantilla de dashboard de shadcn con datos de ejemplo (`data.json`). |
-| `/matriz` | [`app/matriz/page.tsx`](src/app/matriz/page.tsx) | UX05 | Matriz de precios por tienda ([`matriz-screen.tsx`](src/components/matriz/matriz-screen.tsx)). |
-| `/producto` | [`app/producto/page.tsx`](src/app/producto/page.tsx) | UX06 | Ficha de producto: KPIs, historial de precios y comparación por tienda ([`product-detail-screen.tsx`](src/components/producto/product-detail-screen.tsx)). |
-| `/alertas` | [`app/alertas/page.tsx`](src/app/alertas/page.tsx) | UX07 | Lista de alertas del mercado con filtros por tipo y estado ([`alerts-screen.tsx`](src/components/alertas/alerts-screen.tsx)). |
-| `/regla-nueva` | [`app/regla-nueva/page.tsx`](src/app/regla-nueva/page.tsx) | UX08 | Formulario para crear una regla de alerta ([`new-rule-screen.tsx`](src/components/regla/new-rule-screen.tsx)). |
+| [`/dashboard`](http://localhost:3000/dashboard) | Plantilla de shadcn con datos de ejemplo (`data.json`). Sin conectar a la API ni protegida por sesión | ✅ | [`app/dashboard/page.tsx`](src/app/dashboard/page.tsx) |
+
+## Pantallas de acceso en detalle
+
+### `/ingresar` · [`login-form.tsx`](src/components/auth/login-form.tsx)
+
+| Caso | Comportamiento |
+|---|---|
+| Formulario | Correo y contraseña (con botón para mostrarla). Llama a `POST /auth/login` |
+| Cuenta de prueba configurada | Aviso con las credenciales arriba del formulario |
+| Credenciales incorrectas | Mensaje de error |
+| `?motivo=sesion-vencida` | Aviso de sesión vencida |
+| Login correcto | Va a `?next=` si viene en la URL; si no, al inicio del rol: `/admin/solicitudes` (admin) o `/dashboard` (cliente) |
+| Ya hay sesión | Redirige directo al inicio del rol |
+| Enlaces | `/recuperar` y `/demo` |
+
+### `/recuperar` · [`recover-form.tsx`](src/components/auth/recover-form.tsx)
+
+| Caso | Comportamiento |
+|---|---|
+| Formulario | Pide el correo y llama a `POST /auth/recover` |
+| Después de enviar | "Revisá tu correo" con el correo ingresado. La API responde igual exista o no la cuenta |
+| Enlace del correo | Lleva a `/restablecer/{token}` y vence en 1 hora |
+
+### `/definir-contrasena` y `/restablecer` · [`set-password-form.tsx`](src/components/auth/set-password-form.tsx)
+
+Las dos usan el mismo formulario con distinto `mode`.
+
+| | `/definir-contrasena` (`mode="define"`) | `/restablecer` (`mode="reset"`) |
+|---|---|---|
+| Cuándo llega | El admin crea el usuario y le llega el correo de bienvenida | El usuario lo pidió en `/recuperar` |
+| Al abrir | `POST /auth/token/verify` | `POST /auth/token/verify` |
+| Título | "Te damos la bienvenida a PriceScope" | "Restablecé tu contraseña" |
+| Muestra | El nombre de la empresa | El correo de la cuenta |
+| Reglas en vivo | 8 caracteres, una mayúscula, un número, que coincidan | Igual |
+| Guarda con | `POST /auth/password` | `POST /auth/password` |
+| Al guardar | Inicia sesión y lleva al inicio del rol | "Contraseña actualizada" con botón a `/ingresar` |
+| Si falla el login automático | "Contraseña guardada" con botón a `/ingresar` | — |
+| Vigencia del enlace | 72 horas; hay que pedir otro al equipo | 1 hora; botón para pedir otro en `/recuperar` |
+
+## Cómo habla con la API
+
+El navegador nunca llama al backend directo: pide a `/api/v1/*` en el mismo origen y Next lo reenvía a `BACKEND_URL`.
+Así la cookie de sesión es de primera parte y no hace falta CORS.
+
+| Archivo | Qué hace |
+|---|---|
+| [`next.config.ts`](next.config.ts) | Reescribe `/api/v1/*` → `BACKEND_URL` |
+| [`src/lib/api.ts`](src/lib/api.ts) | Cliente tipado (`apiFetch`) y tipos de la API |
+| [`src/lib/auth.tsx`](src/lib/auth.tsx) | `AuthProvider` y `useAuth` (sesión, login, logout, refresco del token) y `HOME_BY_ROLE` |
 
 ## Componentes
 
-- `src/components/ui/`: componentes de shadcn. Se agregan con `pnpm dlx shadcn@latest add <componente>`.
-- `src/components/auth/`: pantallas de acceso. [`auth-shell.tsx`](src/components/auth/auth-shell.tsx)
-  es el layout de dos columnas de `/ingresar` y `/recuperar` (el panel derecho queda reservado
-  para una imagen). [`centered-shell.tsx`](src/components/auth/centered-shell.tsx) es la card
-  centrada de las páginas a las que se llega desde un correo.
-- `src/components/admin/`: backoffice.
-- `src/components/matriz/`: matriz de precios (UX05).
-- `src/components/producto/`: ficha de producto (UX06).
-- `src/components/alertas/`: alertas del mercado (UX07).
-- `src/components/regla/`: creación de reglas de alerta (UX08).
+| Carpeta / archivo | Qué hay |
+|---|---|
+| `src/components/ui/` | Componentes de shadcn. Se agregan con `pnpm dlx shadcn@latest add <componente>` |
+| `src/components/auth/` | Pantallas de acceso |
+| [`auth-shell.tsx`](src/components/auth/auth-shell.tsx) | Layout de dos columnas de `/ingresar` y `/recuperar` (el panel derecho queda reservado para una imagen) |
+| [`centered-shell.tsx`](src/components/auth/centered-shell.tsx) | Card centrada de las páginas a las que se llega desde un correo |
+| `src/components/admin/` | Backoffice |
+| `src/components/demo/` | Pantalla `/demo` |
+
+## Problemas comunes
+
+| Síntoma | Solución |
+|---|---|
+| Una pantalla muestra una versión vieja | `rm -rf .next && pnpm dev` |
+| No aparece la cuenta de prueba en `/ingresar` | Revisá `NEXT_PUBLIC_DEMO_*` en `.env.local` y reiniciá `pnpm dev` |
+| Los enlaces de los correos abren otro puerto | `FRONTEND_URL=http://localhost:3000` en `backend/.env` |
+| Consola: ``Route "/admin": Could not validate `instant` `` | Ruido de desarrollo por `cacheComponents` + `redirect()`. La redirección funciona igual |

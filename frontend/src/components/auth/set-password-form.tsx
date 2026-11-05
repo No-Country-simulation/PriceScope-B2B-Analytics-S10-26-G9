@@ -2,88 +2,74 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import {
+  ArrowLeftIcon,
+  CheckIcon,
+  CircleAlertIcon,
   CircleCheckIcon,
   CircleIcon,
-  TriangleAlertIcon,
+  EyeIcon,
+  EyeOffIcon,
+  Loader2Icon,
+  LinkIcon,
 } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ApiError, apiFetch, type TokenStatus, type TokenType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-// UX03 · Definir / Restablecer contraseña. Define = primera contraseña
-// desde el correo de bienvenida; reset = nueva contraseña desde /recuperar.
-// Maqueta: la cuenta es de ejemplo, el token del URL no se consume todavía.
-
+// "define": first password, from the welcome email the admin triggers.
+// "reset": new password, from the link the user asked for in /recuperar.
 type Mode = "define" | "reset"
 
-const ACCOUNT = {
-  name: "Lucía",
-  company: "Grupo Andino Retail",
-  email: "lucia@andinoretail.com",
+const TOKEN_TYPE: Record<Mode, TokenType> = {
+  define: "set_password",
+  reset: "reset_password",
 }
 
-type Copy = {
-  title: string
-  subtitle: React.ReactNode
-  cta: string
-  doneTitle: string
-  doneDescription: string
-  badTitleExpired: string
-  badSubExpired: string
-  badTitleInvalid: string
-  badSubInvalid: string
-  badCta: string
-  badHref: string
-}
-
-const COPY: Record<Mode, Copy> = {
+const COPY = {
   define: {
-    title: "Te damos la bienvenida a PriceScope",
-    subtitle: (
+    title: "Definí tu contraseña",
+    description: (company: string) => (
       <>
-        {ACCOUNT.company} ya tiene su cuenta. Definí tu contraseña para
-        ingresar.
+        El equipo de PriceScope creó tu cuenta para{" "}
+        <strong className="text-foreground">{company}</strong>. Elegí una
+        contraseña para ingresar.
       </>
     ),
-    cta: "Definir contraseña e ingresar",
+    cta: "Guardar y continuar",
+    footnote:
+      "Este enlace se usa una sola vez y vence en 72 horas. Si venció, pedile uno nuevo al equipo de PriceScope.",
     doneTitle: "Contraseña guardada",
     doneDescription:
       "Tu cuenta ya está activa. Ingresá con tu correo y la contraseña que elegiste.",
-    badTitleExpired: "El enlace venció",
-    badSubExpired:
-      "Los enlaces de bienvenida duran 72 horas. Pedile uno nuevo al equipo de PriceScope.",
-    badTitleInvalid: "El enlace no es válido",
-    badSubInvalid:
-      "Revisá que hayas copiado el enlace completo del correo, o pedile uno nuevo al equipo de PriceScope.",
-    badCta: "Volver a ingresar",
-    badHref: "/ingresar",
+    expiredDescription:
+      "Pedile uno nuevo al equipo de PriceScope para activar tu cuenta.",
   },
   reset: {
     title: "Restablecé tu contraseña",
-    subtitle: (
+    description: (company: string) => (
       <>
-        Elegí una contraseña nueva para{" "}
-        <strong className="text-foreground">{ACCOUNT.email}</strong>.
+        Elegí una contraseña nueva para tu cuenta de{" "}
+        <strong className="text-foreground">{company}</strong>.
       </>
     ),
-    cta: "Guardar contraseña nueva",
+    cta: "Guardar contraseña",
+    footnote:
+      "Este enlace se usa una sola vez y vence en 1 hora. Si venció, pedí uno nuevo.",
     doneTitle: "Contraseña actualizada",
     doneDescription:
       "Tu contraseña quedó guardada. Ya podés ingresar con la nueva.",
-    badTitleExpired: "El enlace venció",
-    badSubExpired:
-      "Los enlaces para restablecer duran 1 hora. Pedí uno nuevo.",
-    badTitleInvalid: "El enlace no es válido",
-    badSubInvalid:
-      "Revisá que hayas copiado el enlace completo, o pedí uno nuevo.",
-    badCta: "Pedir un enlace nuevo",
-    badHref: "/recuperar",
+    expiredDescription: "Pedí un enlace nuevo para restablecer tu contraseña.",
   },
-}
+} satisfies Record<Mode, unknown>
 
+// Same rules the backend enforces. The submit stays disabled until all pass.
 function passwordRules(password: string, confirmation: string) {
   return [
     { label: "Mínimo 8 caracteres", ok: password.length >= 8 },
@@ -96,48 +82,62 @@ function passwordRules(password: string, confirmation: string) {
   ]
 }
 
-// Cuatro segmentos: las tres reglas obligatorias + bonus por 12+ caracteres.
-const STRENGTH = [
-  { label: "muy débil", color: "" },
-  { label: "débil", color: "#dc2626" },
-  { label: "aceptable", color: "#d97706" },
-  { label: "buena", color: "#65a30d" },
-  { label: "fuerte", color: "#15803d" },
-]
-
-function strengthScore(password: string) {
-  let score = 0
-  if (password.length >= 8) score += 1
-  if (/[A-ZÁÉÍÓÚÑ]/.test(password)) score += 1
-  if (/[0-9]/.test(password)) score += 1
-  if (/[^A-Za-z0-9]/.test(password) || password.length >= 12) score += 1
-  return score
-}
+type LinkState =
+  | { state: "loading" }
+  | { state: "offline" }
+  | { state: "expired" | "invalid" }
+  | { state: "valid"; email: string; company: string }
 
 export function SetPasswordForm({ mode }: { mode: Mode }) {
+  const { token } = useParams<{ token: string }>()
   const copy = COPY[mode]
 
-  const [password, setPassword] = React.useState("")
-  const [confirmation, setConfirmation] = React.useState("")
+  const [link, setLink] = React.useState<LinkState>({ state: "loading" })
+  const [attempt, setAttempt] = React.useState(0)
   const [done, setDone] = React.useState(false)
 
-  const rules = passwordRules(password, confirmation)
-  const allOk = rules.every((rule) => rule.ok)
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!allOk) return
-    setDone(true)
-  }
+  // Check the link before showing the form, so an expired or used one says
+  // so up front instead of after the visitor typed a password.
+  React.useEffect(() => {
+    let cancelled = false
+    apiFetch<TokenStatus>("/auth/token/verify", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    })
+      .then((result): LinkState => {
+        // A welcome link opened as a reset one (or the reverse) is treated
+        // as invalid: the copy and the expiry on screen would be wrong.
+        if (result.status !== "valid" || result.type !== TOKEN_TYPE[mode]) {
+          return { state: result.status === "expired" ? "expired" : "invalid" }
+        }
+        return {
+          state: "valid",
+          email: result.email ?? "",
+          company: result.company ?? "",
+        }
+      })
+      // A malformed token fails validation (422): it's just an invalid link.
+      .catch((err): LinkState =>
+        err instanceof ApiError && err.status < 500
+          ? { state: "invalid" }
+          : { state: "offline" }
+      )
+      .then((next) => {
+        if (!cancelled) setLink(next)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, mode, attempt])
 
   if (done) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-[14px] border border-border bg-card p-7 text-center shadow-sm">
-        <span className="flex size-11 items-center justify-center rounded-full bg-[#f0fdf4] text-[#15803d]">
+      <div role="status" className="flex flex-col gap-5">
+        <span className="flex size-11 items-center justify-center rounded-full bg-muted">
           <CircleCheckIcon className="size-5" />
         </span>
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight">
             {copy.doneTitle}
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -146,10 +146,7 @@ export function SetPasswordForm({ mode }: { mode: Mode }) {
         </div>
         <Link
           href="/ingresar"
-          className={cn(
-            buttonVariants(),
-            "h-10 w-full"
-          )}
+          className={buttonVariants({ size: "lg", className: "h-10" })}
         >
           Ir a ingresar
         </Link>
@@ -157,159 +154,264 @@ export function SetPasswordForm({ mode }: { mode: Mode }) {
     )
   }
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label={mode === "define" ? "Definir contraseña" : "Restablecer contraseña"}
-      className="flex flex-col gap-5 rounded-[14px] border border-border bg-card p-7 shadow-sm"
-    >
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-[22px] font-semibold tracking-[-0.02em]">
-          {copy.title}
-        </h1>
-        <p className="text-sm text-muted-foreground">{copy.subtitle}</p>
+  if (link.state === "loading") {
+    return (
+      <div aria-busy="true" className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
       </div>
+    )
+  }
 
-      {/* Nueva contraseña */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="new-password">Nueva contraseña</Label>
-        <PasswordField
-          id="new-password"
-          value={password}
-          onChange={setPassword}
-        />
-        <StrengthMeter password={password} />
+  if (link.state === "offline") {
+    return (
+      <div className="flex flex-col gap-5">
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>
+            No pudimos conectar con el servidor. Probá de nuevo.
+          </AlertDescription>
+        </Alert>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-10"
+          onClick={() => {
+            setLink({ state: "loading" })
+            setAttempt((value) => value + 1)
+          }}
+        >
+          Reintentar
+        </Button>
+        <BackToLogin />
       </div>
+    )
+  }
 
-      {/* Confirmar */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="confirm-password">Confirmar contraseña</Label>
-        <PasswordField
-          id="confirm-password"
-          value={confirmation}
-          onChange={setConfirmation}
-        />
-      </div>
-
-      {/* Reglas */}
-      <ul className="flex flex-col gap-1.5 text-[13px]">
-        {rules.map((rule) => (
-          <li
-            key={rule.label}
-            className="flex items-center gap-2"
-            style={{ color: rule.ok ? "#15803d" : "#71717a" }}
+  if (link.state !== "valid") {
+    return (
+      <div role="alert" className="flex flex-col gap-5">
+        <span className="flex size-11 items-center justify-center rounded-full bg-muted">
+          <LinkIcon className="size-5" />
+        </span>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {link.state === "expired"
+              ? "El enlace venció"
+              : "El enlace no es válido"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {link.state === "invalid" ? "Puede que ya se haya usado. " : null}
+            {copy.expiredDescription}
+          </p>
+        </div>
+        {mode === "reset" ? (
+          <Link
+            href="/recuperar"
+            className={buttonVariants({ size: "lg", className: "h-10" })}
           >
+            Pedir un enlace nuevo
+          </Link>
+        ) : null}
+        <BackToLogin />
+      </div>
+    )
+  }
+
+  return (
+    <PasswordForm
+      mode={mode}
+      token={token}
+      email={link.email}
+      company={link.company}
+      onDone={() => setDone(true)}
+    />
+  )
+}
+
+function PasswordForm({
+  mode,
+  token,
+  email,
+  company,
+  onDone,
+}: {
+  mode: Mode
+  token: string
+  email: string
+  company: string
+  onDone: () => void
+}) {
+  const copy = COPY[mode]
+
+  const [password, setPassword] = React.useState("")
+  const [confirmation, setConfirmation] = React.useState("")
+  const [pending, setPending] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const rules = passwordRules(password, confirmation)
+  const allOk = rules.every((rule) => rule.ok)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!allOk) return
+    setPending(true)
+    setError(null)
+    try {
+      await apiFetch("/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ token, password }),
+      })
+      onDone()
+    } catch (err) {
+      if (err instanceof ApiError && err.status < 500) {
+        setError(err.message)
+      } else {
+        setError("No pudimos conectar con el servidor. Probá de nuevo.")
+      }
+      setPending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <p className="text-sm text-muted-foreground">
+          {copy.description(company)}
+        </p>
+      </div>
+
+      {error ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email">Correo</Label>
+        {/* Read-only, and named "username" so password managers file the
+            new password under the right account. */}
+        <Input
+          id="email"
+          name="username"
+          type="email"
+          autoComplete="username"
+          value={email}
+          readOnly
+          className="h-10 bg-muted text-muted-foreground"
+        />
+      </div>
+
+      <PasswordField
+        id="password"
+        label="Nueva contraseña"
+        value={password}
+        onChange={setPassword}
+      />
+
+      <ul
+        id="password-rules"
+        className="flex flex-col gap-1.5 rounded-lg border bg-muted/50 px-3 py-2.5 text-sm"
+      >
+        {rules.map((rule) => (
+          <li key={rule.label} className="flex items-center gap-2">
             {rule.ok ? (
-              <CircleCheckIcon className="size-4 shrink-0" />
+              <CheckIcon className="size-4 shrink-0 text-success" />
             ) : (
-              <CircleIcon className="size-4 shrink-0" />
+              <CircleIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
-            {rule.label}
+            <span
+              className={cn(
+                rule.ok ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {rule.label}
+            </span>
           </li>
         ))}
       </ul>
 
-      <Button type="submit" className="h-10 w-full" disabled={!allOk}>
-        {copy.cta}
+      <PasswordField
+        id="confirmation"
+        label="Repetí la contraseña"
+        value={confirmation}
+        onChange={setConfirmation}
+      />
+
+      <Button
+        type="submit"
+        size="lg"
+        className="h-10"
+        disabled={pending || !allOk}
+      >
+        {pending && <Loader2Icon className="animate-spin" />}
+        {pending ? "Guardando…" : copy.cta}
       </Button>
+
+      <p className="text-sm text-muted-foreground">{copy.footnote}</p>
     </form>
   )
 }
 
 function PasswordField({
   id,
+  label,
   value,
   onChange,
 }: {
   id: string
+  label: string
   value: string
   onChange: (value: string) => void
 }) {
   const [shown, setShown] = React.useState(false)
   return (
-    <div className="relative">
-      <Input
-        id={id}
-        type={shown ? "text" : "password"}
-        autoComplete="new-password"
-        required
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-describedby="password-rules"
-        className="h-10 pr-11"
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="absolute top-1/2 right-1.5 -translate-y-1/2"
-        onClick={() => setShown((v) => !v)}
-        aria-label={shown ? "Ocultar contraseña" : "Mostrar contraseña"}
-        aria-pressed={shown}
-      >
-        {shown ? "Ocultar" : "Mostrar"}
-      </Button>
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          name={id}
+          type={shown ? "text" : "password"}
+          autoComplete="new-password"
+          required
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-describedby="password-rules"
+          className="h-10 pr-10"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+          onClick={() => setShown((value) => !value)}
+          aria-label={shown ? "Ocultar contraseña" : "Mostrar contraseña"}
+          aria-pressed={shown}
+        >
+          {shown ? <EyeOffIcon /> : <EyeIcon />}
+        </Button>
+      </div>
     </div>
   )
 }
 
-function StrengthMeter({ password }: { password: string }) {
-  const score = strengthScore(password)
-  const level = STRENGTH[score]
+function BackToLogin() {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-4 gap-1" aria-hidden="true">
-        {[0, 1, 2, 3].map((index) => (
-          <span
-            key={index}
-            className="h-1 rounded-full"
-            style={{
-              backgroundColor:
-                index < score ? level.color : "#e4e4e7",
-            }}
-          />
-        ))}
-      </div>
-      <span
-        aria-live="polite"
-        className="text-xs"
-        style={{ color: score >= 3 ? "#15803d" : "#b45309" }}
-      >
-        Fortaleza: {level.label}
-      </span>
-    </div>
-  )
-}
-
-// Estado de enlace inválido o vencido (maqueta: no se usa todavía, el token
-// del URL no se consume, pero el componente está listo para cuando se active).
-export function SetPasswordBadLink({
-  mode,
-  reason,
-}: {
-  mode: Mode
-  reason: "expired" | "invalid"
-}) {
-  const copy = COPY[mode]
-  return (
-    <div className="flex flex-col items-center gap-4 rounded-[14px] border border-border bg-card p-7 text-center shadow-sm">
-      <span className="flex size-11 items-center justify-center rounded-full bg-[#fef2f2] text-[#b91c1c]">
-        <TriangleAlertIcon className="size-5" />
-      </span>
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-xl font-semibold tracking-tight">
-          {reason === "expired" ? copy.badTitleExpired : copy.badTitleInvalid}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {reason === "expired" ? copy.badSubExpired : copy.badSubInvalid}
-        </p>
-      </div>
-      <Link
-        href={copy.badHref}
-        className={cn(buttonVariants({ variant: "outline" }), "h-10 w-full")}
-      >
-        {copy.badCta}
-      </Link>
-    </div>
+    <Link
+      href="/ingresar"
+      className="flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+    >
+      <ArrowLeftIcon className="size-4" />
+      Volver a ingresar
+    </Link>
   )
 }

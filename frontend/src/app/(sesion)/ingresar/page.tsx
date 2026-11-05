@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { LoginShell } from "@/components/auth/login-shell"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { LoginForm } from "@/components/auth/login-form"
 
 export const metadata: Metadata = {
@@ -10,10 +10,10 @@ export const metadata: Metadata = {
 
 export default function IngresarPage() {
   return (
-    <LoginShell>
+    <AuthShell>
       <Suspense>
         <LoginForm />
       </Suspense>
-    </LoginShell>
+    </AuthShell>
   )
 }
