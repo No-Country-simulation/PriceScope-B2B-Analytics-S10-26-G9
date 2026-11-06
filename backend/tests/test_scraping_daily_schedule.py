@@ -28,7 +28,7 @@ def test_daily_schedules_are_registered() -> None:
         assert job.second == 0
         assert job.run_at_startup is False
         assert job.unique is True
-        assert job.max_tries == 1
+        assert job.max_tries == 3
 
     assert tasks.WorkerSettings.timezone == UTC
 
