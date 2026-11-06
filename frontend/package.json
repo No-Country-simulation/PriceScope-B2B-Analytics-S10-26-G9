@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:prod": "cross-env BACKEND_URL=https://pricescope-b2b-analytics-s10-26-g9-production.up.railway.app next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -33,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",

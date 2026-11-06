@@ -1,8 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
-watchPatterns = ["/backend/**"]
-
-[deploy]
-startCommand = "arq app.workers.tasks.WorkerSettings"
-restartPolicyType = "ALWAYS"

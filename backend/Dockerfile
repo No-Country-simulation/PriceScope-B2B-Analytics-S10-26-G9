@@ -17,5 +17,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev
 
-# Default command: the API. The worker service overrides it (see railway.worker.toml).
+# Default command: the API. The worker overrides it with its own start command
+# (see "Deploy en Railway" in README.md).
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips '*'"]

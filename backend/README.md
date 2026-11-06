@@ -204,6 +204,82 @@ MAIL_SENDER="PriceScope <no-responder@tu-dominio-verificado.com>"
   `onboarding@resend.dev` solo entrega al email de la cuenta de Resend, no a usuarios reales.
 - Los envíos siguen pasando por la cola de ARQ, con sus reintentos: el worker tiene que estar corriendo.
 
+## Deploy en Railway
+
+Producción corre en [Railway](https://railway.com) con cuatro servicios en el mismo proyecto. El
+frontend está en Vercel y llama a la API a través de su rewrite `/api/v1` (ver
+[`frontend/README.md`](../frontend/README.md)).
+
+| Servicio | Origen | Para qué |
+|---|---|---|
+| `timescaledb` | Docker Image `timescale/timescaledb:2.26.1-pg16` + volumen | Base de datos |
+| `Redis` | Database → Redis | Cola de ARQ y rate limit del scraping |
+| API | Este repo, con el [`Dockerfile`](Dockerfile) | FastAPI (uvicorn en `$PORT`) |
+| `worker` | Este repo, con el mismo `Dockerfile` | ARQ: correos y crons |
+
+La configuración se carga a mano en cada servicio (**Settings** y **Variables**), no hay
+config-as-code.
+
+### `timescaledb`
+
+- Volumen montado en `/var/lib/postgresql/data`.
+- Variables:
+
+  ```env
+  POSTGRES_USER=pricescope
+  POSTGRES_PASSWORD=<contraseña larga>
+  POSTGRES_DB=pricescope
+  PGDATA=/var/lib/postgresql/data/pgdata
+  TIMESCALEDB_TELEMETRY=off
+  ```
+
+  `PGDATA` apunta a una subcarpeta porque el volumen de Railway trae `lost+found` y Postgres no
+  inicializa en una carpeta que no está vacía.
+
+### API y worker
+
+Los dos usan **Root Directory** `/backend` y las mismas variables (el worker sin `PORT`):
+
+```env
+POSTGRES_HOST=${{timescaledb.RAILWAY_PRIVATE_DOMAIN}}
+POSTGRES_PORT=5432
+POSTGRES_USER=${{timescaledb.POSTGRES_USER}}
+POSTGRES_PASSWORD=${{timescaledb.POSTGRES_PASSWORD}}
+POSTGRES_DB=${{timescaledb.POSTGRES_DB}}
+REDIS_URL=${{Redis.REDIS_URL}}
+ENVIRONMENT=production
+JWT_SECRET=<openssl rand -hex 32, el mismo en los dos>
+FRONTEND_URL=https://<front>.vercel.app
+PORT=8080
+SCRAPING_ENABLED=false
+# + las variables SMTP_* de Resend (sección anterior)
+```
+
+| Setting | API | worker |
+|---|---|---|
+| Pre-deploy Command | `/app/.venv/bin/alembic upgrade head` | vacío |
+| Custom Start Command | vacío (usa el `CMD` del Dockerfile) | `/app/.venv/bin/arq app.workers.tasks.WorkerSettings` |
+| Networking | Generate Domain (puerto 8080) | sin dominio |
+
+- Los comandos usan la ruta completa `/app/.venv/bin/...` porque la consola de Railway no hereda el
+  `PATH` del Dockerfile.
+- Si el worker arranca sin su Start Command, corre otra copia de la API y no procesa la cola. En sus
+  logs tiene que aparecer `Starting worker for ... functions`, no `Uvicorn running`.
+
+### Primer deploy: crear el administrador
+
+En el servicio de la API → pestaña **Console**:
+
+```bash
+/app/.venv/bin/python -m scripts.seed
+```
+
+### Verificar
+
+`https://<api>.up.railway.app/health` tiene que responder `"status": "ok"`, con `database`, `redis`
+y la versión de `timescaledb`. Ese chequeo no confirma que las migraciones hayan corrido (la
+extensión ya viene en la imagen): revisa el log de **Pre-deploy** del deploy.
+
 ## Día a día
 
 Con los servicios de Docker arriba (`docker compose up -d`), dos terminales en `backend/`:

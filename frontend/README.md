@@ -19,6 +19,14 @@ Next.js (App Router) + [shadcn/ui](https://ui.shadcn.com) sobre Base UI y Tailwi
 
 El backend solo hace falta para las pantallas que llaman a la API (ver la columna **¿Sin backend?** en [Rutas](#rutas)).
 
+| Comando | Backend al que apunta |
+|---|---|
+| `pnpm dev` | Local, `BACKEND_URL` de `.env.local` (por defecto `http://localhost:8000`) |
+| `pnpm dev:prod` | Producción en Railway. Usa datos reales: no lo uses para pruebas destructivas |
+
+En Vercel, `BACKEND_URL` se carga en **Settings → Environment Variables** con la URL de la API en
+Railway. Next la lee al hacer el build: después de cambiarla hay que redeployar.
+
 ## Variables de entorno
 
 | Dónde | Variable | Para qué sirve |
