@@ -84,7 +84,6 @@ cotizaciones cada hora. Sin él, la API responde bien pero las tareas quedan enc
 se procesan: ningún correo (alta de usuario, reenvío de acceso, restablecer contraseña) llega a
 Mailpit. Al levantarlo, procesa lo que haya quedado en la cola.
 
-
 ## Extracción diaria de supermercados
 
 PriceScope utiliza ARQ y Redis para programar extracciones
@@ -184,6 +183,26 @@ uv run pytest -v tests/test_scraping_jumbo_worker.py
 Los tests utilizan respuestas simuladas y no consultan
 los supermercados reales.
 
+## Correo en staging y producción (Resend)
+
+En local los correos van a Mailpit. En staging y producción se envían con
+[Resend](https://resend.com) por SMTP: solo cambian las variables de entorno, el código es el mismo.
+
+```env
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_USER=resend
+SMTP_PASSWORD=re_xxxxxxxxx
+SMTP_TLS=true
+MAIL_SENDER="PriceScope <no-responder@tu-dominio-verificado.com>"
+```
+
+- `SMTP_PASSWORD` es la API key de Resend. Cárgala como secret del entorno de deploy, nunca en el repo.
+- Usa el puerto 587: el worker abre la conexión con STARTTLS (`SMTP_TLS=true`). El puerto 465 usa TLS
+  implícito y no funciona con esta configuración.
+- `MAIL_SENDER` tiene que usar un dominio verificado en Resend (registros SPF y DKIM).
+  `onboarding@resend.dev` solo entrega al email de la cuenta de Resend, no a usuarios reales.
+- Los envíos siguen pasando por la cola de ARQ, con sus reintentos: el worker tiene que estar corriendo.
 
 ## Día a día
 

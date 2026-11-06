@@ -7,7 +7,7 @@ export function PageHeader({
   actions,
 }: {
   title: string
-  description: string
+  description?: string
   badge?: React.ReactNode
   actions?: React.ReactNode
 }) {
@@ -18,7 +18,9 @@ export function PageHeader({
           <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
           {badge}
         </div>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        {description && (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>

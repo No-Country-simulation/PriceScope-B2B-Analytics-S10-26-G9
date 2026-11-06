@@ -14,18 +14,18 @@ import {
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Turnstile } from "@/components/auth/turnstile"
 import { ApiError } from "@/lib/api"
 import { HOME_BY_ROLE, safeNextPath, useAuth } from "@/lib/auth"
 
 // Test account shown on the login page; the alert is hidden when unset.
 const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD
+// Cloudflare Turnstile site key; the challenge is skipped when unset.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
-// Access screen from mockup 03 · Iniciar sesión: warm paper frame shared
-// with the screens opened from an email link, 460px card, pill CTA.
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,6 +35,11 @@ export function LoginForm() {
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [invalid, setInvalid] = React.useState(false)
+  const [captchaToken, setCaptchaToken] = React.useState<string | null>(null)
+  // Bumped after a failed attempt to remount the widget: each token is
+  // single-use, so the next try needs a fresh challenge.
+  const [captchaKey, setCaptchaKey] = React.useState(0)
+  const captchaMissing = Boolean(TURNSTILE_SITE_KEY) && !captchaToken
 
   const next = safeNextPath(searchParams.get("next"))
   const sessionExpired =
@@ -49,6 +54,7 @@ export function LoginForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (captchaMissing) return
     const form = new FormData(event.currentTarget)
     setPending(true)
     setError(null)
@@ -66,135 +72,126 @@ export function LoginForm() {
         setError("No pudimos conectar con el servidor. Probá de nuevo.")
       }
       setPending(false)
+      setCaptchaToken(null)
+      setCaptchaKey((key) => key + 1)
     }
   }
 
   return (
-    <>
-      <Card className="gap-6 rounded-[32px] bg-white p-9 shadow-[0_24px_64px_rgba(120,90,40,0.12)] ring-0">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-4xl font-extrabold tracking-[-0.035em]">
-            Iniciar sesión
-          </h1>
-          <p className="text-base leading-relaxed text-ink-soft">
-            Ingresá con el correo de tu cuenta.
-          </p>
-        </div>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Ingresá a tu cuenta
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          ¡Bienvenido de nuevo! 👋
+        </p>
+      </div>
 
-        {DEMO_EMAIL && DEMO_PASSWORD ? (
-          <Alert className="border-brand/20 bg-brand/5">
-            <InfoIcon className="text-brand" />
-            <AlertDescription>
-              <p>
-                Usá <strong className="text-foreground">{DEMO_EMAIL}</strong>{" "}
-                con la contraseña{" "}
-                <strong className="text-foreground">{DEMO_PASSWORD}</strong>
-              </p>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+      {DEMO_EMAIL && DEMO_PASSWORD ? (
+        <Alert className="border-brand/20 bg-brand/5">
+          <InfoIcon className="text-brand" />
+          <AlertDescription>
+            <p>
+              Usá <strong className="text-foreground">{DEMO_EMAIL}</strong> con
+              la contraseña{" "}
+              <strong className="text-foreground">{DEMO_PASSWORD}</strong>
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        {error ? (
-          <Alert variant="destructive">
-            <CircleAlertIcon />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : sessionExpired ? (
-          <Alert>
-            <ClockIcon />
-            <AlertDescription>
-              Tu sesión venció por inactividad. Volvé a ingresar.
-            </AlertDescription>
-          </Alert>
-        ) : null}
+      {error ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : sessionExpired ? (
+        <Alert>
+          <ClockIcon />
+          <AlertDescription>
+            Tu sesión venció por inactividad. Volvé a ingresar.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <form
-          onSubmit={handleSubmit}
-          aria-label="Iniciar sesión"
-          className="flex flex-col gap-4"
-        >
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="email" className="font-semibold">
-              Correo
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="nombre@empresa.com"
-              required
-              aria-invalid={invalid || undefined}
-              className="h-14 rounded-[14px] border-paper-line bg-paper px-4 text-base focus-visible:ring-0 md:text-base"
-            />
-          </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email">Correo</Label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="nombre@empresa.com"
+          required
+          aria-invalid={invalid || undefined}
+          className="h-10"
+        />
+      </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password" className="font-semibold">
-              Contraseña
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                required
-                aria-invalid={invalid || undefined}
-                className="h-14 min-w-0 flex-1 rounded-[14px] border-paper-line bg-paper px-4 text-base focus-visible:ring-0 md:text-base"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-14 shrink-0 rounded-[14px] border-paper-line bg-white text-ink-soft hover:bg-paper hover:text-ink focus-visible:ring-0"
-                onClick={() => setShowPassword((shown) => !shown)}
-                aria-label={
-                  showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-                }
-                aria-pressed={showPassword}
-              >
-                {showPassword ? (
-                  <EyeOffIcon className="size-5" />
-                ) : (
-                  <EyeIcon className="size-5" />
-                )}
-              </Button>
-            </div>
-          </div>
-
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="password">Contraseña</Label>
           <Link
             href="/recuperar"
-            className="self-end text-sm text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             ¿Olvidaste tu contraseña?
           </Link>
-
+        </div>
+        <div className="relative">
+          <Input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            aria-invalid={invalid || undefined}
+            className="h-10 pr-10"
+          />
           <Button
-            type="submit"
-            size="lg"
-            className="h-[56px] rounded-full px-6 text-base font-semibold shadow-[0_10px_24px_rgba(28,28,30,0.22)]"
-            disabled={pending}
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+            onClick={() => setShowPassword((shown) => !shown)}
+            aria-label={
+              showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+            }
+            aria-pressed={showPassword}
           >
-            {pending && <Loader2Icon className="animate-spin" />}
-            {pending ? "Ingresando…" : "Ingresar"}
+            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
           </Button>
-        </form>
+        </div>
+      </div>
 
-        <p className="border-t border-[#F3F0EA] pt-5 text-center text-base leading-relaxed text-ink-soft">
-          ¿Todavía no sos cliente?{" "}
-          <Link
-            href="/demo"
-            className="font-semibold text-ink underline-offset-4 hover:text-black"
-          >
-            Agendá una demo
-          </Link>
-        </p>
-      </Card>
+      {TURNSTILE_SITE_KEY ? (
+        <Turnstile
+          key={captchaKey}
+          siteKey={TURNSTILE_SITE_KEY}
+          onToken={setCaptchaToken}
+        />
+      ) : null}
 
-      <p className="mt-5 text-center text-sm text-ink-soft">
-        Las cuentas las crea el equipo de PriceScope después de la demo.
+      <Button
+        type="submit"
+        size="lg"
+        className="h-10"
+        disabled={pending || captchaMissing}
+      >
+        {pending && <Loader2Icon className="animate-spin" />}
+        {pending ? "Ingresando…" : "Ingresar"}
+      </Button>
+
+      <p className="text-sm text-muted-foreground">
+        ¿Todavía no sos cliente?{" "}
+        <Link
+          href="/demo"
+          className="text-foreground underline underline-offset-4"
+        >
+          Agendá una demo
+        </Link>
       </p>
-    </>
+    </form>
   )
 }

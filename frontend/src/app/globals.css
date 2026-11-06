@@ -35,6 +35,26 @@
   --color-success-fill: #22c55e;
   --color-warning: #f59e0b;
 
+  /* Cinta de "Qué medimos" en la landing. */
+  --animate-marquee: marquee 28s linear infinite;
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* Vaivén de las palmeras en /demo. */
+  --animate-sway: sway 7s ease-in-out infinite;
+  @keyframes sway {
+    0%,
+    100% {
+      transform: rotate(-1.6deg);
+    }
+    50% {
+      transform: rotate(1.6deg);
+    }
+  }
+
   --font-serif: var(--font-newsreader);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -95,27 +115,9 @@ input:focus {
   border-color: #4a5bdb;
 }
 
-/* The screens opened from an email link (mockup 03b · Definir contraseña)
-   swap the brand ring for the mint one of the design, and keep the field
-   border warm instead of turning it blue. Unlayered on purpose: it has to
-   win over the generic rules above and over the utilities below. */
-.paper-link-screen :is(input, a, button):focus-visible {
-  outline: 3px solid #9cc9b9;
-  outline-offset: 2px;
-}
-
-.paper-link-screen input:focus {
-  border-color: #ece8e0;
-}
-
 /* UX05 · Matriz de precios: la tabla hace scroll en los dos ejes dentro de su
    tarjeta. El contenedor de la tabla de shadcn es el único scrollport, así la
    cabecera queda pegada arriba y la columna del producto a la izquierda. */
-.matrix-scroll [data-slot="table-container"] {
-  max-height: 760px;
-  overflow: auto;
-}
-
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);

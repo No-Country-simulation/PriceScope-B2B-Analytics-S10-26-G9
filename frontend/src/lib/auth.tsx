@@ -10,11 +10,11 @@ import {
   type TokenOutput,
 } from "@/lib/api"
 
-// Where each role lands after logging in. The client dashboard (UX04) will
-// live at /dashboard.
+// Where each role lands after logging in: admins go to the backoffice,
+// everyone else to the client app under /user.
 export const HOME_BY_ROLE: Record<Role, string> = {
-  admin: "/admin/solicitudes",
-  client: "/dashboard",
+  admin: "/admin",
+  client: "/user",
 }
 
 export const SESSION_EXPIRED_PARAM = "motivo=sesion-vencida"
