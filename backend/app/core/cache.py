@@ -6,4 +6,4 @@ from app.core.config import settings
 redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
 
 # Connection used by the API (to enqueue) and by the worker (to run jobs)
-arq_settings = RedisSettings(host=settings.redis_host, port=settings.redis_port)
+arq_settings = RedisSettings.from_dsn(settings.redis_url)
