@@ -23,11 +23,21 @@ class MatrixCellOutput(BaseModel):
     captured_at: datetime
 
 
+class MatrixSpreadOutput(BaseModel):
+    cheapest_store_slug: str | None
+    cheapest_price: Decimal
+    most_expensive_store_slug: str | None
+    most_expensive_price: Decimal
+    difference: Decimal
+    percentage: Decimal
+
+
 class MatrixRowOutput(BaseModel):
     product_id: uuid.UUID
     ean: str
     name: str
     prices: list[MatrixCellOutput]
+    spread: MatrixSpreadOutput | None
 
 
 class MatrixOutput(Page[MatrixRowOutput]):

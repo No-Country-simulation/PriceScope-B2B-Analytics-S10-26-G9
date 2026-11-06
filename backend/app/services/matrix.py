@@ -2,6 +2,7 @@
 
 import uuid
 from collections import defaultdict
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
@@ -14,14 +15,40 @@ from app.schemas.matrix import (
     MatrixCellOutput,
     MatrixOutput,
     MatrixRowOutput,
+    MatrixSpreadOutput,
     MatrixStoreOutput,
     Rate,
 )
 from app.services.stores import visible_store_ids
 
+CENTS = Decimal("0.01")
+
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _spread(cells: list[MatrixCellOutput]) -> MatrixSpreadOutput | None:
+    """Gap between the cheapest and the most expensive available offer."""
+    offers = [c for c in cells if c.price is not None and c.available]
+    if len(offers) < 2:
+        return None
+
+    cheapest = min(offers, key=lambda c: (c.price, c.store_slug))
+    expensive = max(offers, key=lambda c: (c.price, c.store_slug))
+    if cheapest.price <= 0:
+        return None
+
+    difference = expensive.price - cheapest.price
+    tie = difference == 0
+    return MatrixSpreadOutput(
+        cheapest_store_slug=None if tie else cheapest.store_slug,
+        cheapest_price=cheapest.price,
+        most_expensive_store_slug=None if tie else expensive.store_slug,
+        most_expensive_price=expensive.price,
+        difference=difference,
+        percentage=(difference / cheapest.price * 100).quantize(CENTS),
+    )
 
 
 async def get_matrix(
@@ -137,16 +164,21 @@ async def get_matrix(
         for p in await db.scalars(select(CanonicalProduct).where(CanonicalProduct.id.in_(page_ids)))
     }
 
-    return MatrixOutput(
-        items=[
+    items = []
+    for pid in page_ids:
+        product_prices = sorted(by_product[pid], key=lambda c: c.store_slug)
+        items.append(
             MatrixRowOutput(
                 product_id=pid,
                 ean=details[pid].ean,
                 name=details[pid].name,
-                prices=sorted(by_product[pid], key=lambda c: c.store_slug),
+                prices=product_prices,
+                spread=_spread(product_prices),
             )
-            for pid in page_ids
-        ],
+        )
+
+    return MatrixOutput(
+        items=items,
         total=total,
         page=page,
         size=size,

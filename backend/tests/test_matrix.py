@@ -33,6 +33,7 @@ async def add_listing(
     ars: str,
     usd_official: str,
     usd_blue: str,
+    available: bool = True,
 ) -> Listing:
     listing = Listing(
         store_id=store.id,
@@ -50,6 +51,7 @@ async def add_listing(
             local_price=Decimal(ars),
             price_usd_official=Decimal(usd_official),
             price_usd_blue=Decimal(usd_blue),
+            available=available,
         )
     )
     return listing
@@ -190,3 +192,55 @@ async def test_client_without_stores_gets_empty_matrix(
     assert body["items"] == []
     assert body["stores"] == []
     assert body["total"] == 0
+
+
+async def test_spread_between_stores(
+    client: AsyncClient, admin_token: str, catalog: dict[str, Store]
+) -> None:
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+
+    spread = row(body, "07790070000012")["spread"]
+    assert spread["cheapest_store_slug"] == "carrefour"
+    assert spread["most_expensive_store_slug"] == "jumbo"
+    assert spread["difference"] == "155.00"
+    assert spread["percentage"] == "4.78"
+
+
+async def test_spread_is_null_with_a_single_store(
+    client: AsyncClient, admin_token: str, catalog: dict[str, Store]
+) -> None:
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    assert row(body, "07791337007253")["spread"] is None
+
+
+async def test_spread_tie_has_no_cheapest_store(client: AsyncClient, admin_token: str) -> None:
+    async with SessionLocal() as db:
+        alpha = await add_store(db, "alpha")
+        beta = await add_store(db, "beta")
+        product = CanonicalProduct(ean="07790000000001", name="Producto empatado")
+        db.add(product)
+        await db.flush()
+        await add_listing(db, alpha, product, "1", "100.00", "0.10", "0.09")
+        await add_listing(db, beta, product, "2", "100.00", "0.10", "0.09")
+        await db.commit()
+
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    spread = row(body, "07790000000001")["spread"]
+    assert spread["cheapest_store_slug"] is None
+    assert spread["most_expensive_store_slug"] is None
+    assert spread["percentage"] == "0.00"
+
+
+async def test_spread_ignores_unavailable_offers(client: AsyncClient, admin_token: str) -> None:
+    async with SessionLocal() as db:
+        alpha = await add_store(db, "alpha")
+        beta = await add_store(db, "beta")
+        product = CanonicalProduct(ean="07790000000002", name="Producto sin stock")
+        db.add(product)
+        await db.flush()
+        await add_listing(db, alpha, product, "1", "100.00", "0.10", "0.09")
+        await add_listing(db, beta, product, "2", "300.00", "0.30", "0.27", available=False)
+        await db.commit()
+
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    assert row(body, "07790000000002")["spread"] is None
