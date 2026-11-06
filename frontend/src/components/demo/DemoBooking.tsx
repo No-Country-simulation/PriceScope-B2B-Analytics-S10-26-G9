@@ -23,22 +23,39 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { apiFetch, type DemoRequest, type OrganizationType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-const DAYS = [
-  "Jueves 22/10",
-  "Viernes 23/10",
-  "Lunes 26/10",
-  "Martes 27/10",
-  "Miércoles 28/10",
-]
 const SLOTS = ["10:00", "11:30", "15:00", "16:30"]
-const ORG_TYPES = [
-  "Cadena minorista",
-  "Fondo de inversión",
-  "Medio de comunicación",
-  "Otro",
-].map((t) => ({ label: t, value: t }))
+const ORG_TYPES: { label: string; value: OrganizationType }[] = [
+  { label: "Cadena minorista", value: "retail" },
+  { label: "Fondo de inversión", value: "fund" },
+  { label: "Medio de comunicación", value: "media" },
+  { label: "Otro", value: "other" },
+]
+const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+// Buenos Aires is UTC-3 all year (no DST).
+const BA_OFFSET = "-03:00"
+
+type Day = { label: string; iso: string }
+
+// Next `count` business days in Buenos Aires, starting tomorrow.
+function nextBusinessDays(count: number): Day[] {
+  const ba = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  const days: Day[] = []
+  for (let i = 1; days.length < count; i++) {
+    const d = new Date(Date.UTC(ba.getUTCFullYear(), ba.getUTCMonth(), ba.getUTCDate() + i))
+    const wd = d.getUTCDay()
+    if (wd === 0 || wd === 6) continue
+    const dd = String(d.getUTCDate()).padStart(2, "0")
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0")
+    days.push({
+      label: `${WEEKDAYS[wd]} ${dd}/${mm}`,
+      iso: `${d.getUTCFullYear()}-${mm}-${dd}`,
+    })
+  }
+  return days
+}
 const STEPS = [
   { title: "Tus datos", sub: "Empresa y contacto" },
   { title: "Fecha y hora", sub: "Elegí un horario" },
@@ -51,11 +68,17 @@ export function DemoBooking() {
   const [tried, setTried] = useState(false)
   const [day, setDay] = useState(-1)
   const [time, setTime] = useState(-1)
+  // Computed when entering step 2, not during render: Date.now() at render
+  // time would be frozen in the prerendered page.
+  const [days, setDays] = useState<Day[]>([])
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [f, setF] = useState({
     empresa: "",
     nombre: "",
     correo: "",
-    tipo: ORG_TYPES[0].value,
+    tipo: ORG_TYPES[0].value as OrganizationType,
+    comentario: "",
   })
 
   const set =
@@ -69,10 +92,44 @@ export function DemoBooking() {
 
   const next1 = () => {
     if (f.empresa.trim() && f.nombre.trim() && okMail) {
+      const fresh = nextBusinessDays(5)
+      if (fresh[day]?.iso !== days[day]?.iso) {
+        setDay(-1)
+        setTime(-1)
+      }
+      setDays(fresh)
       setStep(2)
       setTried(false)
     } else {
       setTried(true)
+    }
+  }
+
+  const confirm = async () => {
+    if (day < 0 || time < 0 || sending) return
+    setSending(true)
+    setSendError(null)
+    try {
+      await apiFetch<DemoRequest>("/demo/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          company: f.empresa.trim(),
+          name: f.nombre.trim(),
+          email: f.correo.trim(),
+          organization_type: f.tipo,
+          comment: f.comentario.trim() || null,
+          preferred_date: `${days[day].iso}T${SLOTS[time]}:00${BA_OFFSET}`,
+        }),
+      })
+      setStep(3)
+    } catch (err) {
+      setSendError(
+        err instanceof Error
+          ? err.message
+          : "No pudimos enviar la solicitud. Probá de nuevo."
+      )
+    } finally {
+      setSending(false)
     }
   }
 
@@ -154,7 +211,7 @@ export function DemoBooking() {
                   items={ORG_TYPES}
                   value={f.tipo}
                   onValueChange={(v) =>
-                    setF((prev) => ({ ...prev, tipo: v as string }))
+                    setF((prev) => ({ ...prev, tipo: v as OrganizationType }))
                   }
                 >
                   <SelectTrigger id="d-tipo" className="w-full">
@@ -201,6 +258,9 @@ export function DemoBooking() {
                 <FieldLabel htmlFor="d-com">Comentario</FieldLabel>
                 <Textarea
                   id="d-com"
+                  value={f.comentario}
+                  onChange={set("comentario")}
+                  maxLength={1000}
                   placeholder="¿Qué categorías te interesan?"
                 />
                 <FieldDescription>
@@ -227,17 +287,18 @@ export function DemoBooking() {
               <Field>
                 <FieldTitle>Elegí un día</FieldTitle>
                 <div className="flex flex-wrap gap-2">
-                  {DAYS.map((d, i) => (
+                  {days.map((d, i) => (
                     <Button
-                      key={d}
+                      key={d.iso}
                       variant={day === i ? "default" : "outline"}
                       aria-pressed={day === i}
                       onClick={() => {
                         setDay(i)
                         setTime(-1)
+                        setSendError(null)
                       }}
                     >
-                      {d}
+                      {d.label}
                     </Button>
                   ))}
                 </div>
@@ -255,8 +316,10 @@ export function DemoBooking() {
                         key={s}
                         variant={time === i ? "default" : "outline"}
                         aria-pressed={time === i}
-                        disabled={i === day % 4}
-                        onClick={() => setTime(i)}
+                        onClick={() => {
+                          setTime(i)
+                          setSendError(null)
+                        }}
                       >
                         {s}
                       </Button>
@@ -265,12 +328,24 @@ export function DemoBooking() {
                 )}
               </Field>
             </FieldGroup>
+            {sendError && (
+              <p
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+              >
+                {sendError}
+              </p>
+            )}
             <div className="mt-auto flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => setStep(1)}>
+              <Button
+                variant="outline"
+                disabled={sending}
+                onClick={() => setStep(1)}
+              >
                 Volver
               </Button>
-              <Button disabled={noSel} onClick={() => setStep(3)}>
-                Confirmar demo
+              <Button disabled={noSel || sending} onClick={confirm}>
+                {sending ? "Enviando…" : "Confirmar demo"}
                 <ArrowRightIcon data-icon="inline-end" />
               </Button>
             </div>
@@ -283,14 +358,14 @@ export function DemoBooking() {
               <CheckIcon className="size-5" />
             </span>
             <StepHeading
-              title="¡Listo, tu demo está agendada!"
+              title="¡Listo, recibimos tu solicitud!"
               lead={
                 <>
-                  Te enviamos la confirmación a{" "}
+                  Te vamos a escribir a{" "}
                   <span className="font-medium text-foreground">
                     {f.correo}
-                  </span>
-                  .
+                  </span>{" "}
+                  para confirmar el horario.
                 </>
               }
             />
@@ -299,7 +374,7 @@ export function DemoBooking() {
                 Fecha y hora
               </span>
               <span className="text-base font-medium">
-                {DAYS[day]} · {SLOTS[time]} h
+                {days[day]?.label} · {SLOTS[time]} h
               </span>
               <span className="text-sm text-muted-foreground">
                 {f.nombre} · {f.empresa}
