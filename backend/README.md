@@ -36,7 +36,9 @@ Esto levanta:
 |--------------|--------------|-----------------------------------------|
 | TimescaleDB  | 5432         | Base de datos (PostgreSQL 16 + Timescale) |
 | Redis        | 6379         | Cola de trabajos (ARQ) y caché          |
-| Mailpit      | 8025         | Bandeja de entrada de correos de prueba (http://localhost:8025) |
+
+Los correos no usan Docker: salen por Resend también en local (ver
+[Correo con Resend](#correo-con-resend)).
 
 ## 3. Instalar las dependencias
 
@@ -79,10 +81,10 @@ En otra terminal:
 uv run arq app.workers.tasks.WorkerSettings
 ```
 
-El worker envía los correos (que aparecen en Mailpit: http://localhost:8025) y ejecuta la ingesta de
-cotizaciones cada hora. Sin él, la API responde bien pero las tareas quedan encoladas en Redis y no
-se procesan: ningún correo (alta de usuario, reenvío de acceso, restablecer contraseña) llega a
-Mailpit. Al levantarlo, procesa lo que haya quedado en la cola.
+El worker envía los correos por Resend y ejecuta la ingesta de cotizaciones cada hora. Sin él, la API
+responde bien pero las tareas quedan encoladas en Redis y no se procesan: ningún correo (alta de
+usuario, reenvío de acceso, restablecer contraseña) sale. Al levantarlo, procesa lo que haya quedado
+en la cola.
 
 ## Extracción diaria de supermercados
 
@@ -183,26 +185,26 @@ uv run pytest -v tests/test_scraping_jumbo_worker.py
 Los tests utilizan respuestas simuladas y no consultan
 los supermercados reales.
 
-## Correo en staging y producción (Resend)
+## Correo con Resend
 
-En local los correos van a Mailpit. En staging y producción se envían con
-[Resend](https://resend.com) por SMTP: solo cambian las variables de entorno, el código es el mismo.
+Todos los entornos (local, staging y producción) envían con [Resend](https://resend.com) por SMTP.
+Los correos son reales también en local. El código ya trae host, puerto, usuario y TLS de Resend;
+solo hace falta la API key:
 
 ```env
-SMTP_HOST=smtp.resend.com
-SMTP_PORT=587
-SMTP_USER=resend
 SMTP_PASSWORD=re_xxxxxxxxx
-SMTP_TLS=true
-MAIL_SENDER="PriceScope <no-responder@tu-dominio-verificado.com>"
+# Opcional, con un dominio verificado en Resend:
+# MAIL_SENDER="PriceScope <no-responder@tu-dominio-verificado.com>"
 ```
 
-- `SMTP_PASSWORD` es la API key de Resend. Cárgala como secret del entorno de deploy, nunca en el repo.
-- Usa el puerto 587: el worker abre la conexión con STARTTLS (`SMTP_TLS=true`). El puerto 465 usa TLS
-  implícito y no funciona con esta configuración.
-- `MAIL_SENDER` tiene que usar un dominio verificado en Resend (registros SPF y DKIM).
-  `onboarding@resend.dev` solo entrega al email de la cuenta de Resend, no a usuarios reales.
-- Los envíos siguen pasando por la cola de ARQ, con sus reintentos: el worker tiene que estar corriendo.
+- `SMTP_PASSWORD` es la API key de Resend. En local va en tu `.env`; en Railway, en las variables
+  del worker. Nunca en el repo.
+- El remitente por defecto es `onboarding@resend.dev`, que solo entrega al email de la cuenta de
+  Resend. Para mandar a usuarios reales, verifica un dominio (SPF y DKIM) y cambia `MAIL_SENDER`.
+- Cada prueba en local manda un correo de verdad y cuenta para el límite del plan de Resend.
+- Si sobreescribes el puerto, usa 587: el worker abre la conexión con STARTTLS (`SMTP_TLS=true`).
+  El puerto 465 usa TLS implícito y no funciona con esta configuración.
+- Los envíos pasan por la cola de ARQ, con sus reintentos: el worker tiene que estar corriendo.
 
 ## Deploy en Railway
 
@@ -252,7 +254,7 @@ JWT_SECRET=<openssl rand -hex 32, el mismo en los dos>
 FRONTEND_URL=https://<front>.vercel.app
 PORT=8080
 SCRAPING_ENABLED=false
-# + las variables SMTP_* de Resend (sección anterior)
+SMTP_PASSWORD=<API key de Resend>   # la usa el worker; ver "Correo con Resend"
 ```
 
 | Setting | API | worker |
