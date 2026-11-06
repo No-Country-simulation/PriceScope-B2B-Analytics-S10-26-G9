@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379
+    # Full URL with credentials (Railway, Upstash...). Takes precedence over host/port.
+    redis_url_override: str | None = Field(default=None, validation_alias="REDIS_URL")
 
     # Scraping
     scraping_enabled: bool = False
@@ -76,7 +78,7 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
-        return f"redis://{self.redis_host}:{self.redis_port}/0"
+        return self.redis_url_override or f"redis://{self.redis_host}:{self.redis_port}/0"
 
     @property
     def secure_cookies(self) -> bool:
