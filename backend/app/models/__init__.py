@@ -1,4 +1,5 @@
 from app.models.access_token import AccessToken
+from app.models.canonical_product import CanonicalProduct
 from app.models.demo_request import DemoRequest
 from app.models.email_change import EmailChange
 from app.models.enums import (
@@ -37,4 +38,5 @@ __all__ = [
     "UserStore",
     "StoreLocation",
     "ScrapingRun",
+    "CanonicalProduct",
 ]
