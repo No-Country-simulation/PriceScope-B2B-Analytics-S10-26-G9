@@ -1,10 +1,21 @@
 import Link from "next/link"
 import { ChartNoAxesCombinedIcon } from "lucide-react"
 
-// Two-column frame shared by the access screens (login, password recovery).
-export function AuthShell({ children }: { children: React.ReactNode }) {
+import { cn } from "@/lib/utils"
+
+// Frame shared by the access screens. "split" (login, password recovery)
+// puts the form on the left and a panel on the right; "centered" (the
+// screens opened from an email link) drops the panel and centers the form.
+export function AuthShell({
+  children,
+  layout = "split",
+}: {
+  children: React.ReactNode
+  layout?: "split" | "centered"
+}) {
+  const split = layout === "split"
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
+    <div className={cn("grid min-h-svh", split && "lg:grid-cols-2")}>
       <div className="flex flex-col gap-4 px-6 py-8 md:px-10">
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="flex w-full max-w-90 flex-col gap-8">
@@ -25,7 +36,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         </p>
       </div>
       {/* Reserved for the product visual; left blank for now. */}
-      <div className="hidden bg-muted lg:block" />
+      {split ? <div className="hidden bg-muted lg:block" /> : null}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Inter, Inter_Tight, Newsreader } from "next/font/google";
+import { Geist, Geist_Mono, Inter, Inter_Tight, Newsreader } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -9,8 +9,14 @@ const geist = Geist({
   subsets: ["latin"],
 });
 
+// Geist Mono es la tipografía de los números de la matriz (UX05).
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
 // Inter, Inter Tight and Newsreader are still used by the pages that predate
-// shadcn (/, /demo, /registro) until they are migrated.
+// shadcn (/, /demo) until they are migrated.
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -41,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn(
         "h-full font-sans antialiased",
         geist.variable,
+        geistMono.variable,
         inter.variable,
         interTight.variable,
         newsreader.variable,
