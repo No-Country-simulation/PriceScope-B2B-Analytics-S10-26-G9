@@ -57,13 +57,14 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    # Mail
-    smtp_host: str = "localhost"
-    smtp_port: int = 1025
-    smtp_user: str | None = None
+    # Mail: Resend over SMTP in every environment. Only SMTP_PASSWORD (the API key) is required.
+    smtp_host: str = "smtp.resend.com"
+    smtp_port: int = 587
+    smtp_user: str | None = "resend"
     smtp_password: str | None = None
-    smtp_tls: bool = False
-    mail_sender: str = "PriceScope <no-responder@pricescope.local>"
+    smtp_tls: bool = True
+    # onboarding@resend.dev only delivers to the Resend account's own address.
+    mail_sender: str = "PriceScope <onboarding@resend.dev>"
 
     @property
     def database_url(self) -> URL:
