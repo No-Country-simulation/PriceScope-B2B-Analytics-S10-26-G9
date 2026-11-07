@@ -1,11 +1,11 @@
 import type { Metadata } from "next"
 
-import { PageHeader } from "@/components/admin/page-header"
+import { Dashboard } from "@/components/dashboard/dashboard"
 
 export const metadata: Metadata = {
   title: "Dashboard · PriceScope",
 }
 
 export default function DashboardPage() {
-  return <PageHeader title="Dashboard" />
+  return <Dashboard />
 }

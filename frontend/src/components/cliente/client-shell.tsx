@@ -9,6 +9,7 @@ import {
   clientPageTitle,
 } from "@/components/cliente/client-sidebar"
 import { SiteHeader } from "@/components/site-header"
+import { DashboardHeaderActions } from "@/components/dashboard/dashboard-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { SESSION_EXPIRED_PARAM, useAuth } from "@/lib/auth"
@@ -72,5 +73,8 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
 
 function ClientHeader() {
   const pathname = usePathname()
-  return <SiteHeader title={clientPageTitle(pathname)} />
+  const isDashboard = pathname === "/user/dashboard"
+  return <SiteHeader title={clientPageTitle(pathname)} section={isDashboard ? "Análisis" : undefined}>
+    {isDashboard && <DashboardHeaderActions />}
+  </SiteHeader>
 }
