@@ -40,6 +40,14 @@ export function AlertsBoard() {
     (alert) => alert.isNew && !seen.includes(alert.id)
   ).map((alert) => alert.id)
 
+  // Como en la maqueta: abrir una alerta en el detalle ya la deja por vista.
+  function pickAlert(id: string) {
+    setSelectedId(id)
+    setSeen((current) =>
+      current.includes(id) ? current : [...current, id]
+    )
+  }
+
   function markAllSeen() {
     setSeen(ALERTS.map((alert) => alert.id))
   }
@@ -90,12 +98,12 @@ export function AlertsBoard() {
         </TabsList>
 
         <TabsContent value="fired" className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 xl:flex-row">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
             <Inbox
               alerts={ALERTS}
               unseenIds={unseenIds}
               selectedId={selected.id}
-              onPick={setSelectedId}
+              onPick={pickAlert}
               onMarkAllSeen={markAllSeen}
             />
             <AlertDetail alert={selected} />
@@ -128,7 +136,7 @@ function Inbox({
   onMarkAllSeen: () => void
 }) {
   return (
-    <Card className="min-w-0 flex-1 basis-[340px] gap-0 py-0 shadow-xs">
+    <Card className="min-w-0 xl:flex-[1_1_340px] gap-0 py-0 shadow-xs">
       <div className="flex items-center justify-between gap-2 border-b p-4">
         <h3 className="text-sm font-semibold">Bandeja</h3>
         <Button
@@ -140,7 +148,9 @@ function Inbox({
           Marcar todas como vistas
         </Button>
       </div>
-      <div className="flex flex-col">
+      {/* La bandeja no crece sin límite: con muchas alertas scrollea
+          adentro de su tarjeta, como una bandeja de verdad. */}
+      <div className="flex max-h-[34rem] flex-col overflow-y-auto">
         {alerts.map((alert) => {
           const unseen = unseenIds.includes(alert.id)
           const selected = alert.id === selectedId
@@ -151,7 +161,7 @@ function Inbox({
               onClick={() => onPick(alert.id)}
               aria-current={selected ? "true" : undefined}
               className={cn(
-                "flex w-full gap-3 border-b px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring",
+                "flex w-full gap-3 border-b px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-muted/50",
                 selected && "bg-muted hover:bg-muted"
               )}
             >
@@ -198,7 +208,7 @@ function AlertDetail({ alert }: { alert: FiredAlert }) {
   const gap = alert.average - alert.devaluation
 
   return (
-    <Card className="min-w-0 flex-[2] basis-[520px] gap-0 py-0 shadow-xs">
+    <Card className="min-w-0 xl:flex-[2_1_520px] gap-0 py-0 shadow-xs">
       <div className="flex flex-col gap-3.5 border-b p-5">
         <div className="flex flex-wrap items-start justify-between gap-2.5">
           <div className="flex min-w-0 flex-col gap-1">
