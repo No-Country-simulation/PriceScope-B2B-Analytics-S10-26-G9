@@ -58,3 +58,9 @@ export function formatPct(value: number) {
   const sign = value >= 0 ? "+" : "−"
   return sign + Math.abs(value).toFixed(1).replace(".", ",") + " %"
 }
+
+// Diferencia en puntos porcentuales: "4,6 p.p." Siempre se muestra en valor
+// absoluto, porque es la distancia entre la suba y la devaluación (UX07).
+export function formatPP(value: number) {
+  return Math.abs(value).toFixed(1).replace(".", ",") + " p.p."
+}
