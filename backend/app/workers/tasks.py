@@ -170,27 +170,20 @@ async def scrape_approved_store(
                         error_message=error_message,
                     )
 
-
                     log.warning(
                         "Scraping failed for %s: %s",
                         store_slug,
                         error_code,
                     )
 
-                    if (
-                        isinstance(exc, VtexFetchError)
-                        and should_retry_vtex_error(exc)
-                    ):
+                    if isinstance(exc, VtexFetchError) and should_retry_vtex_error(exc):
                         attempt = ctx.get("job_try", 1)
 
                         if attempt < SCRAPING_MAX_TRIES:
-                            delay = SCRAPING_RETRY_BASE_DELAY * (
-                                2 ** (attempt - 1)
-                            )
+                            delay = SCRAPING_RETRY_BASE_DELAY * (2 ** (attempt - 1))
 
                             log.warning(
-                                "Scheduling retry for %s: "
-                                "attempt %s/%s, delay %ss",
+                                "Scheduling retry for %s: attempt %s/%s, delay %ss",
                                 store_slug,
                                 attempt + 1,
                                 SCRAPING_MAX_TRIES,
@@ -200,7 +193,6 @@ async def scrape_approved_store(
                             raise Retry(defer=delay) from exc
 
                     raise
-
 
                 await finish_scraping_run(
                     run_id,
@@ -230,7 +222,6 @@ async def scrape_jumbo(ctx: dict) -> dict[str, str | int]:
     return await scrape_approved_store(ctx, "jumbo")
 
 
-
 class WorkerSettings:
     functions = [
         send_email,
@@ -241,14 +232,12 @@ class WorkerSettings:
     cron_jobs = [
         # Existing exchange-rate ingestion: hourly.
         cron(ingest_rates, minute=0),
-
         # Existing scraping-run recovery: hourly.
         cron(
             recover_scraping_runs,
             minute=10,
             max_tries=1,
         ),
-
         # Carrefour: every day at 09:00 UTC (06:00 Argentina).
         cron(
             scrape_carrefour,
@@ -259,7 +248,6 @@ class WorkerSettings:
             unique=True,
             max_tries=SCRAPING_MAX_TRIES,
         ),
-
         # Jumbo: every day at 09:30 UTC (06:30 Argentina).
         cron(
             scrape_jumbo,

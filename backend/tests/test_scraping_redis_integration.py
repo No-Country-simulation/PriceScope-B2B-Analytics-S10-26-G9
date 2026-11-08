@@ -1,4 +1,3 @@
-
 """Integration test: real ARQ/Redis retries, simulated VTEX HTTP."""
 
 import asyncio
@@ -111,9 +110,7 @@ async def test_redis_retries_and_persists_once(
     # Unique Redis queue: does not touch the normal worker queue.
     queue_name = f"arq:test:scraping:{uuid4().hex}"
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
-    ) as fake_http:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as fake_http:
         pool = await create_pool(
             arq_settings,
             default_queue_name=queue_name,
@@ -163,26 +160,16 @@ async def test_redis_retries_and_persists_once(
             if worker is not None:
                 await worker.close()
             else:
-                await pool.close(
-                    close_connection_pool=True
-                )
+                await pool.close(close_connection_pool=True)
 
     assert request_count == 2
 
     async with SessionLocal() as db:
-        runs = (
-            await db.scalars(
-                select(ScrapingRun)
-            )
-        ).all()
+        runs = (await db.scalars(select(ScrapingRun))).all()
 
-        listing_count = await db.scalar(
-            select(sa_func.count()).select_from(Listing)
-        )
+        listing_count = await db.scalar(select(sa_func.count()).select_from(Listing))
 
-        price_count = await db.scalar(
-            select(sa_func.count()).select_from(Price)
-        )
+        price_count = await db.scalar(select(sa_func.count()).select_from(Price))
 
     assert len(runs) == 2
 

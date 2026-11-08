@@ -1,11 +1,8 @@
-
 """Retry policy for controlled scraping jobs."""
 
 from app.scrapers.vtex_client import VtexFetchError
 
-RETRYABLE_STATUS_CODES = frozenset(
-    {500, 502, 503, 504}
-)
+RETRYABLE_STATUS_CODES = frozenset({500, 502, 503, 504})
 
 
 def should_retry_vtex_error(

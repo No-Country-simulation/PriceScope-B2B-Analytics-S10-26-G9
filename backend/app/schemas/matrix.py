@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.common import Page
 
@@ -19,6 +19,8 @@ class MatrixStoreOutput(BaseModel):
 class MatrixCellOutput(BaseModel):
     store_slug: str
     price: Decimal | None
+    regular_price: Decimal | None
+    is_promo: bool
     available: bool
     captured_at: datetime
 
@@ -38,6 +40,11 @@ class MatrixRowOutput(BaseModel):
     name: str
     prices: list[MatrixCellOutput]
     spread: MatrixSpreadOutput | None
+    has_promotion: bool
+    shrinkflation: bool = Field(
+        default=False,
+        description="Always false until scrapers extract grammage (net content).",
+    )
 
 
 class MatrixOutput(Page[MatrixRowOutput]):

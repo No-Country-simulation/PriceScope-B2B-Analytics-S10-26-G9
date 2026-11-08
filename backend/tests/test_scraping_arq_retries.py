@@ -1,4 +1,3 @@
-
 """Tests for bounded ARQ scraping retries."""
 
 from decimal import Decimal
@@ -99,9 +98,7 @@ async def test_temporary_failure_then_success(
             json=[sample_product()],
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         with pytest.raises(Retry) as retry:
             await tasks.scrape_approved_store(
                 {"scraping_http": client, "job_try": 1},
@@ -120,20 +117,10 @@ async def test_temporary_failure_then_success(
     assert result["observations_saved"] == 1
 
     async with SessionLocal() as db:
-        runs = (
-            await db.scalars(
-                select(ScrapingRun).order_by(
-                    ScrapingRun.started_at
-                )
-            )
-        ).all()
+        runs = (await db.scalars(select(ScrapingRun).order_by(ScrapingRun.started_at))).all()
 
-        listings = await db.scalar(
-            select(func.count()).select_from(Listing)
-        )
-        prices = (
-            await db.scalars(select(Price))
-        ).all()
+        listings = await db.scalar(select(func.count()).select_from(Listing))
+        prices = (await db.scalars(select(Price))).all()
 
     assert len(runs) == 2
     assert {run.status for run in runs} == {
@@ -161,9 +148,7 @@ async def test_http_429_does_not_retry(
         )
     ) as client:
         with pytest.raises(VtexFetchError) as error:
-            await tasks.scrape_jumbo(
-                {"scraping_http": client, "job_try": 1}
-            )
+            await tasks.scrape_jumbo({"scraping_http": client, "job_try": 1})
 
     assert error.value.status_code == 429
 
@@ -181,14 +166,10 @@ async def test_third_failure_exhausts_attempts(
     await create_store("jumbo")
 
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda request: httpx.Response(503)
-        )
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
     ) as client:
         with pytest.raises(VtexFetchError) as error:
-            await tasks.scrape_jumbo(
-                {"scraping_http": client, "job_try": 3}
-            )
+            await tasks.scrape_jumbo({"scraping_http": client, "job_try": 3})
 
     assert error.value.status_code == 503
 
@@ -200,10 +181,7 @@ async def test_third_failure_exhausts_attempts(
 
 
 def test_daily_cron_jobs_allow_three_attempts() -> None:
-    jobs = {
-        job.name: job
-        for job in tasks.WorkerSettings.cron_jobs
-    }
+    jobs = {job.name: job for job in tasks.WorkerSettings.cron_jobs}
 
     assert jobs["cron:scrape_carrefour"].max_tries == 3
     assert jobs["cron:scrape_jumbo"].max_tries == 3

@@ -34,6 +34,8 @@ async def add_listing(
     usd_official: str,
     usd_blue: str,
     available: bool = True,
+    regular: str | None = None,
+    promo: bool = False,
 ) -> Listing:
     listing = Listing(
         store_id=store.id,
@@ -52,6 +54,8 @@ async def add_listing(
             price_usd_official=Decimal(usd_official),
             price_usd_blue=Decimal(usd_blue),
             available=available,
+            regular_price=Decimal(regular or ars),
+            is_promo=promo,
         )
     )
     return listing
@@ -244,3 +248,58 @@ async def test_spread_ignores_unavailable_offers(client: AsyncClient, admin_toke
 
     body = (await client.get(URL, headers=bearer(admin_token))).json()
     assert row(body, "07790000000002")["spread"] is None
+
+
+async def test_promotion_shows_regular_and_promo_prices(
+    client: AsyncClient, admin_token: str
+) -> None:
+    async with SessionLocal() as db:
+        store = await add_store(db, "alpha")
+        product = CanonicalProduct(ean="07790000000003", name="Producto en promo")
+        db.add(product)
+        await db.flush()
+        await add_listing(
+            db, store, product, "1", "3000.00", "3.00", "2.00", regular="4000.00", promo=True
+        )
+        await db.commit()
+
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    item = row(body, "07790000000003")
+    cell = item["prices"][0]
+
+    assert cell["is_promo"] is True
+    assert cell["price"] == "3000.00"
+    assert cell["regular_price"] == "4000.00"
+    assert item["has_promotion"] is True
+    assert item["shrinkflation"] is False
+
+
+@pytest.mark.parametrize(("rate", "expected"), [("official", "4.00"), ("blue", "2.67")])
+async def test_regular_price_in_usd_scales_with_selected_rate(
+    client: AsyncClient, admin_token: str, rate: str, expected: str
+) -> None:
+    async with SessionLocal() as db:
+        store = await add_store(db, "alpha")
+        product = CanonicalProduct(ean="07790000000004", name="Producto en promo usd")
+        db.add(product)
+        await db.flush()
+        await add_listing(
+            db, store, product, "1", "3000.00", "3.00", "2.00", regular="4000.00", promo=True
+        )
+        await db.commit()
+
+    response = await client.get(
+        URL, params={"currency": "usd", "rate": rate}, headers=bearer(admin_token)
+    )
+    cell = row(response.json(), "07790000000004")["prices"][0]
+    assert cell["regular_price"] == expected
+
+
+async def test_product_without_promotion(
+    client: AsyncClient, admin_token: str, catalog: dict[str, Store]
+) -> None:
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    item = row(body, "07790070000012")
+
+    assert item["has_promotion"] is False
+    assert all(c["is_promo"] is False and c["regular_price"] == c["price"] for c in item["prices"])

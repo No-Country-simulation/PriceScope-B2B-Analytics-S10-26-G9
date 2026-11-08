@@ -194,6 +194,3 @@ async def test_carrefour_requires_configured_sellers(
     result = await tasks.scrape_carrefour({})
 
     assert result == {"status": "not_configured"}
-
-
-

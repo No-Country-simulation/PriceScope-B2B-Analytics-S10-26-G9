@@ -1,4 +1,3 @@
-
 """Tests for daily scraping cron configuration."""
 
 from datetime import UTC
@@ -10,10 +9,7 @@ from app.workers import tasks
 
 
 def test_daily_schedules_are_registered() -> None:
-    jobs = {
-        job.name: job
-        for job in tasks.WorkerSettings.cron_jobs
-    }
+    jobs = {job.name: job for job in tasks.WorkerSettings.cron_jobs}
 
     assert "cron:scrape_carrefour" in jobs
     assert "cron:scrape_jumbo" in jobs
