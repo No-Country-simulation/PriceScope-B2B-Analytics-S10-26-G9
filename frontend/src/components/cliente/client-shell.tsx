@@ -6,10 +6,10 @@ import { Loader2Icon } from "lucide-react"
 
 import {
   ClientSidebar,
-  clientPageTitle,
+  clientPage,
 } from "@/components/cliente/client-sidebar"
 import { SiteHeader } from "@/components/site-header"
-import { DashboardHeaderActions } from "@/components/dashboard/dashboard-header"
+import { ClientHeaderActions } from "@/components/cliente/client-header-actions"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { SESSION_EXPIRED_PARAM, useAuth } from "@/lib/auth"
@@ -51,13 +51,13 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 64)",
-          "--header-height": "calc(var(--spacing) * 12)",
+          "--header-height": "calc(var(--spacing) * 16)",
         } as React.CSSProperties
       }
     >
       <ClientSidebar user={user} />
       <SidebarInset>
-        <React.Suspense fallback={<SiteHeader title="" />}>
+        <React.Suspense fallback={<SiteHeader title=""><ClientHeaderActions /></SiteHeader>}>
           <ClientHeader />
         </React.Suspense>
         <div className="flex flex-1 flex-col">
@@ -73,8 +73,10 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
 
 function ClientHeader() {
   const pathname = usePathname()
-  const isDashboard = pathname === "/user/dashboard"
-  return <SiteHeader title={clientPageTitle(pathname)} section={isDashboard ? "Análisis" : undefined}>
-    {isDashboard && <DashboardHeaderActions />}
-  </SiteHeader>
+  const { title, section } = clientPage(pathname)
+  return (
+    <SiteHeader title={title} section={section}>
+      <ClientHeaderActions />
+    </SiteHeader>
+  )
 }

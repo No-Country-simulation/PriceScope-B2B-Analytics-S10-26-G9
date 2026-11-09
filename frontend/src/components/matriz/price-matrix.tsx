@@ -53,6 +53,8 @@ import { formatArs, formatPct, formatUsd } from "@/lib/format"
 import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
 
+import { slugOf } from "@/components/producto/data"
+
 import { CATEGORIES, PRODUCTS, STORES, type Product } from "./data"
 
 const PAGE_SIZES = [10, 20, 50]
@@ -226,11 +228,6 @@ export function PriceMatrix() {
       <PageHeader
         title="Matriz de precios"
         description={`El mismo producto en tus ${STORES.length} tiendas asignadas.`}
-        badge={
-          <ToneBadge tone="neutral" className="font-mono">
-            {QUOTE_LABEL[quote]} {formatArs(rate)}
-          </ToneBadge>
-        }
       />
 
       <MatrixKpis />
@@ -395,7 +392,7 @@ export function PriceMatrix() {
                 <TableRow key={row.product.name} className="group/row">
                   <TableCell className="sticky left-0 z-10 border-r bg-card py-3 pl-(--card-spacing) group-hover/row:bg-muted">
                     <Link
-                      href="/user/producto"
+                      href={`/user/producto?p=${slugOf(row.product.name)}`}
                       className="font-medium underline-offset-4 hover:underline"
                     >
                       {row.product.name}

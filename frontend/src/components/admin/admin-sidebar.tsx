@@ -11,6 +11,7 @@ import {
   LayoutDashboardIcon,
   ListChecksIcon,
   LogOutIcon,
+  UserIcon,
   UsersIcon,
 } from "lucide-react"
 
@@ -226,6 +227,13 @@ export function AdminUserMenu({ user }: { user: CurrentUser }) {
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              render={<Link href={`/admin/usuarios/${user.id}`} />}
+            >
+              <UserIcon />
+              Perfil
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => logout()}>
               <LogOutIcon />

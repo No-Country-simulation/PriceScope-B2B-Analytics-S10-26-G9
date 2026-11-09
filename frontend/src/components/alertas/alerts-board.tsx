@@ -2,13 +2,38 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowUpIcon, PlusIcon } from "lucide-react"
+import {
+  ArrowUpIcon,
+  BellRingIcon,
+  CheckCheckIcon,
+  ChartNoAxesCombinedIcon,
+  InboxIcon,
+  ListChecksIcon,
+  PackageIcon,
+  PencilIcon,
+  PlusIcon,
+  ZapIcon,
+} from "lucide-react"
 
+import { KpiCard } from "@/components/admin/kpi-card"
 import { PageHeader } from "@/components/admin/page-header"
 import { ToneBadge } from "@/components/admin/tone"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item"
 import {
   Table,
   TableBody,
@@ -18,16 +43,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatArs, formatPct, formatPP } from "@/lib/format"
-import { QUOTES, QUOTE_LABEL } from "@/lib/quotes"
+import { formatPct, formatPP } from "@/lib/format"
 import { cn } from "@/lib/utils"
+
+import { productHref } from "@/components/producto/data"
 
 import { ALERTS, RULES, type AlertRule, type FiredAlert } from "./data"
 import { RulesList } from "./rules-list"
 
-// UX07 · Alertas: bandeja de alertas disparadas + detalle de la última, y el
-// listado de reglas con activar/pausar y eliminar. Todo el estado vive acá y
-// los datos son de muestra (components/alertas/data.ts): todavía no hay API.
+// UX07 · Alertas: KPIs, bandeja de alertas disparadas + detalle de la elegida,
+// y el listado de reglas con activar/pausar y eliminar. Todo el estado vive
+// acá y los datos son de muestra (components/alertas/data.ts): no hay API.
 export function AlertsBoard() {
   const [seen, setSeen] = React.useState<string[]>([])
   const [selectedId, setSelectedId] = React.useState(ALERTS[0].id)
@@ -39,17 +65,16 @@ export function AlertsBoard() {
   const unseenIds = ALERTS.filter(
     (alert) => alert.isNew && !seen.includes(alert.id)
   ).map((alert) => alert.id)
+  const activeRules = rules.filter((rule) => rule.active).length
+  const affected = ALERTS.reduce((sum, alert) => sum + alert.products, 0)
+  const worstGap = Math.max(
+    ...ALERTS.map((alert) => alert.average - alert.devaluation)
+  )
 
   // Como en la maqueta: abrir una alerta en el detalle ya la deja por vista.
   function pickAlert(id: string) {
     setSelectedId(id)
-    setSeen((current) =>
-      current.includes(id) ? current : [...current, id]
-    )
-  }
-
-  function markAllSeen() {
-    setSeen(ALERTS.map((alert) => alert.id))
+    setSeen((current) => (current.includes(id) ? current : [...current, id]))
   }
 
   function toggleRule(id: string) {
@@ -69,13 +94,9 @@ export function AlertsBoard() {
       <PageHeader
         title="Alertas"
         description="Te avisamos cuando un producto o categoría sube más que la devaluación."
-        badge={
-          <ToneBadge tone="neutral" className="font-mono">
-            {QUOTE_LABEL.blue} {formatArs(QUOTES.blue)} · 06:00
-          </ToneBadge>
-        }
         actions={
           <Button
+            size="lg"
             nativeButton={false}
             render={<Link href="/user/regla-nueva" />}
           >
@@ -85,37 +106,74 @@ export function AlertsBoard() {
         }
       />
 
+      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        <KpiCard
+          label="Sin ver"
+          value={String(unseenIds.length)}
+          hint={`De ${ALERTS.length} alertas disparadas en la bandeja`}
+          tone="red"
+          icon={<BellRingIcon />}
+        />
+        <KpiCard
+          label="Reglas activas"
+          value={`${activeRules} de ${rules.length}`}
+          hint="Las pausadas no disparan alertas"
+          tone="emerald"
+          icon={<ZapIcon />}
+        />
+        <KpiCard
+          label="Productos afectados"
+          value={String(affected)}
+          hint="Sumando todas las alertas de la bandeja"
+          tone="amber"
+          icon={<PackageIcon />}
+        />
+        <KpiCard
+          label="Mayor diferencia"
+          value={`+${formatPP(worstGap)}`}
+          hint="Suba promedio por encima del dólar"
+          tone="brand"
+          icon={<ChartNoAxesCombinedIcon />}
+          mono
+        />
+      </div>
+
       <Tabs defaultValue="fired" className="gap-4">
         <TabsList>
           <TabsTrigger value="fired">
+            <InboxIcon />
             Alertas disparadas
-            <Badge>{unseenIds.length}</Badge>
+            {unseenIds.length > 0 && (
+              <Badge variant="destructive" className="tabular-nums">
+                {unseenIds.length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="rules">
+            <ListChecksIcon />
             Mis reglas
-            <Badge variant="secondary">{rules.length}</Badge>
+            <Badge variant="secondary" className="tabular-nums">
+              {rules.length}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="fired" className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-            <Inbox
-              alerts={ALERTS}
-              unseenIds={unseenIds}
-              selectedId={selected.id}
-              onPick={pickAlert}
-              onMarkAllSeen={markAllSeen}
-            />
-            <AlertDetail alert={selected} />
-          </div>
+        <TabsContent
+          value="fired"
+          className="grid items-start gap-4 @5xl/main:grid-cols-[360px_1fr]"
+        >
+          <Inbox
+            alerts={ALERTS}
+            unseenIds={unseenIds}
+            selectedId={selected.id}
+            onPick={pickAlert}
+            onMarkAllSeen={() => setSeen(ALERTS.map((alert) => alert.id))}
+          />
+          <AlertDetail alert={selected} />
         </TabsContent>
 
-        <TabsContent value="rules" className="flex flex-col gap-4">
-          <RulesList
-            rules={rules}
-            onToggle={toggleRule}
-            onDelete={deleteRule}
-          />
+        <TabsContent value="rules">
+          <RulesList rules={rules} onToggle={toggleRule} onDelete={deleteRule} />
         </TabsContent>
       </Tabs>
     </>
@@ -136,33 +194,43 @@ function Inbox({
   onMarkAllSeen: () => void
 }) {
   return (
-    <Card className="min-w-0 xl:flex-[1_1_340px] gap-0 py-0 shadow-xs">
-      <div className="flex items-center justify-between gap-2 border-b p-4">
-        <h3 className="text-sm font-semibold">Bandeja</h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onMarkAllSeen}
-          disabled={unseenIds.length === 0}
-        >
-          Marcar todas como vistas
-        </Button>
-      </div>
-      {/* La bandeja no crece sin límite: con muchas alertas scrollea
-          adentro de su tarjeta, como una bandeja de verdad. */}
-      <div className="flex max-h-[34rem] flex-col overflow-y-auto">
+    <Card className="min-w-0 gap-0 py-0 shadow-xs">
+      <CardHeader className="border-b py-(--card-spacing)">
+        <CardTitle>
+          <h3>Bandeja</h3>
+        </CardTitle>
+        <CardDescription>
+          {unseenIds.length === 0
+            ? "Estás al día"
+            : `${unseenIds.length} ${unseenIds.length === 1 ? "alerta sin ver" : "alertas sin ver"}`}
+        </CardDescription>
+        <CardAction>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onMarkAllSeen}
+            disabled={unseenIds.length === 0}
+          >
+            <CheckCheckIcon data-icon="inline-start" />
+            Marcar vistas
+          </Button>
+        </CardAction>
+      </CardHeader>
+      {/* Con muchas alertas la bandeja scrollea adentro de su card. */}
+      <ItemGroup className="max-h-[34rem] gap-1 overflow-y-auto p-2">
         {alerts.map((alert) => {
           const unseen = unseenIds.includes(alert.id)
-          const selected = alert.id === selectedId
+          const active = alert.id === selectedId
           return (
-            <button
+            <Item
               key={alert.id}
-              type="button"
+              size="sm"
+              render={<button type="button" />}
               onClick={() => onPick(alert.id)}
-              aria-current={selected ? "true" : undefined}
+              aria-current={active ? "true" : undefined}
               className={cn(
-                "flex w-full gap-3 border-b px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-muted/50",
-                selected && "bg-muted hover:bg-muted"
+                "items-start text-left hover:bg-muted/50",
+                active && "bg-muted hover:bg-muted"
               )}
             >
               <span
@@ -172,34 +240,30 @@ function Inbox({
                 )}
                 aria-hidden="true"
               />
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="flex items-start justify-between gap-2">
-                  <span
-                    className={cn(
-                      "text-sm",
-                      unseen ? "font-semibold" : "font-medium"
-                    )}
-                  >
-                    {alert.rule}
+              <ItemContent className="min-w-0">
+                <ItemTitle
+                  className={cn(
+                    "w-full justify-between",
+                    unseen ? "font-semibold" : "font-medium"
+                  )}
+                >
+                  <span className="truncate">{alert.rule}</span>
+                  <span className="shrink-0 font-mono text-xs font-normal text-muted-foreground tabular-nums">
+                    {alert.firedAt.slice(0, 5)} · {alert.firedAt.slice(11)}
                   </span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                    {alert.firedAt}
-                  </span>
-                </span>
-                <span className="text-sm text-muted-foreground">
+                </ItemTitle>
+                <ItemDescription className="line-clamp-1">
                   {alert.scope}
-                </span>
-                <span className="flex flex-wrap gap-1.5">
-                  <ToneBadge tone="neutral">
-                    {alert.products} productos
-                  </ToneBadge>
+                </ItemDescription>
+                <span className="flex flex-wrap gap-1.5 pt-0.5">
+                  <ToneBadge tone="neutral">{alert.products} productos</ToneBadge>
                   {unseen && <ToneBadge tone="sky">Nueva</ToneBadge>}
                 </span>
-              </span>
-            </button>
+              </ItemContent>
+            </Item>
           )
         })}
-      </div>
+      </ItemGroup>
     </Card>
   )
 }
@@ -208,85 +272,90 @@ function AlertDetail({ alert }: { alert: FiredAlert }) {
   const gap = alert.average - alert.devaluation
 
   return (
-    <Card className="min-w-0 xl:flex-[2_1_520px] gap-0 py-0 shadow-xs">
-      <div className="flex flex-col gap-3.5 border-b p-5">
-        <div className="flex flex-wrap items-start justify-between gap-2.5">
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="font-mono text-xs text-muted-foreground tabular-nums">
-              {alert.firedAt}
-            </span>
-            <h3 className="text-lg font-semibold tracking-tight">
-              {alert.rule}
-            </h3>
-            <p className="text-sm text-muted-foreground">{alert.phrase}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              nativeButton={false}
-              render={<Link href="/user/regla-nueva" />}
-            >
-              Editar regla
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              nativeButton={false}
-              render={<Link href="/user/dashboard" />}
-            >
-              Ver en dashboard
-            </Button>
-          </div>
-        </div>
+    <Card className="min-w-0 gap-0 py-0 shadow-xs">
+      <CardHeader className="border-b py-(--card-spacing)">
+        <CardDescription className="font-mono text-xs tabular-nums">
+          {alert.firedAt}
+        </CardDescription>
+        <CardTitle className="text-lg tracking-tight">
+          <h3>{alert.rule}</h3>
+        </CardTitle>
+        <CardAction className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/user/regla-nueva" />}
+          >
+            <PencilIcon data-icon="inline-start" />
+            Editar regla
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/user/dashboard" />}
+          >
+            Ver en dashboard
+          </Button>
+        </CardAction>
+        <p className="col-span-full text-sm text-muted-foreground">
+          {alert.phrase}
+        </p>
+      </CardHeader>
 
-        <div className="grid gap-2.5 sm:grid-cols-3">
-          <Stat label="Devaluación del período" value={formatPct(alert.devaluation)} />
-          <Stat label="Suba promedio" value={formatPct(alert.average)} />
-          <Stat
-            label="Diferencia"
-            value={formatPP(gap)}
-            up
-          />
-        </div>
-      </div>
+      <dl className="grid divide-y border-b sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <Stat label="Devaluación del período" value={formatPct(alert.devaluation)} />
+        <Stat label="Suba promedio" value={formatPct(alert.average)} />
+        <Stat
+          label="Diferencia"
+          value={
+            <ToneBadge tone="red" className="h-7 px-2.5 font-mono text-base">
+              <ArrowUpIcon />
+              {formatPP(gap)}
+            </ToneBadge>
+          }
+        />
+      </dl>
 
       <Table
         aria-label="Productos que dispararon la alerta"
         className="min-w-[640px]"
       >
-        <TableHeader>
+        <TableHeader className="bg-muted/50">
           <TableRow className="hover:bg-transparent">
-            <TableHead className="pl-5">Producto que la disparó</TableHead>
+            <TableHead className="pl-(--card-spacing)">
+              Producto que la disparó
+            </TableHead>
             <TableHead>Tienda</TableHead>
             <TableHead className="text-right">Variación</TableHead>
             <TableHead className="text-right">Devaluación</TableHead>
-            <TableHead className="pr-5 text-right">Diferencia</TableHead>
+            <TableHead className="pr-(--card-spacing) text-right">
+              Diferencia
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {alert.items.map((item) => (
             <TableRow key={`${alert.id}-${item.product}`}>
-              <TableCell className="py-2.5 pl-5 align-top">
+              <TableCell className="py-3 pl-(--card-spacing)">
                 <Link
-                  href="/user/producto"
-                  className="flex flex-col font-medium underline-offset-4 hover:underline"
+                  href={productHref(item.product)}
+                  className="font-medium underline-offset-4 hover:underline"
                 >
                   {item.product}
                 </Link>
-                <span className="text-xs text-muted-foreground">
-                  {item.category}
-                </span>
+                <div className="text-muted-foreground">{item.category}</div>
               </TableCell>
-              <TableCell className="py-2.5 align-top">{item.store}</TableCell>
-              <TableCell className="py-2.5 text-right align-top font-mono tabular-nums">
+              <TableCell>{item.store}</TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
                 {formatPct(item.variation)}
               </TableCell>
-              <TableCell className="py-2.5 text-right align-top font-mono tabular-nums text-muted-foreground">
+              <TableCell className="text-right font-mono text-muted-foreground tabular-nums">
                 {formatPct(alert.devaluation)}
               </TableCell>
-              <TableCell className="py-2.5 pr-5 text-right align-top">
-                <ToneBadge tone="red" className="font-mono">
+              <TableCell className="pr-(--card-spacing) text-right">
+                <ToneBadge tone="red" className="ml-auto font-mono">
                   <ArrowUpIcon />
                   {formatPP(item.variation - alert.devaluation)}
                 </ToneBadge>
@@ -299,38 +368,13 @@ function AlertDetail({ alert }: { alert: FiredAlert }) {
   )
 }
 
-function Stat({
-  label,
-  value,
-  up = false,
-}: {
-  label: string
-  value: string
-  up?: boolean
-}) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-1 rounded-lg border p-3",
-        up
-          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400"
-          : "text-foreground"
-      )}
-    >
-      <span
-        className={cn(
-          "text-xs",
-          up
-            ? "text-red-700 dark:text-red-400"
-            : "text-muted-foreground"
-        )}
-      >
-        {label}
-      </span>
-      <span className="flex items-center gap-1 font-mono text-xl font-semibold tabular-nums">
-        {up && <ArrowUpIcon className="size-4" aria-hidden="true" />}
+    <div className="flex flex-col gap-1.5 px-(--card-spacing) py-4">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="flex h-7 items-center font-mono text-xl font-semibold tabular-nums">
         {value}
-      </span>
+      </dd>
     </div>
   )
 }

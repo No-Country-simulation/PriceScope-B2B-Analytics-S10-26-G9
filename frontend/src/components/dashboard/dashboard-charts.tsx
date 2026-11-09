@@ -23,13 +23,13 @@ const dateLabel = (date: string) => date.slice(0, 10).split("-").reverse().join(
 const axisDate = (date: string) => dateLabel(date).slice(0, 5)
 const decimal = (value: number) => value.toFixed(1).replace(".", ",")
 const evolutionConfig = {
-  ars: { label: "Índice ARS", color: "var(--foreground)" },
-  usd: { label: "Índice USD", color: "#2563eb" },
-  rate: { label: "Cotización", color: "#ea580c" },
+  ars: { label: "Índice ARS", color: "#4a5bdb" },
+  usd: { label: "Índice USD", color: "#38bdf8" },
+  rate: { label: "Cotización", color: "#f59e0b" },
 } satisfies ChartConfig
 const scatterConfig = {
-  above: { label: "Subió más que el dólar", color: "#ea580c" },
-  below: { label: "Subió menos que el dólar", color: "#2563eb" },
+  above: { label: "Subió más que el dólar", color: "#f87171" },
+  below: { label: "Subió menos que el dólar", color: "#34d399" },
   fx: { label: "Variación del dólar" },
   price: { label: "Variación del precio" },
 } satisfies ChartConfig
@@ -105,7 +105,7 @@ export function DashboardCharts({ filters, summary }: {
                 <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={({ active, payload }) => {
                   const point = payload?.[0]?.payload
                   if (!active || !point) return null
-                  return <div className="rounded-lg border bg-background p-3 text-xs shadow-md">
+                  return <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
                     <p className="mb-1 font-medium">{point.category} · {point.month}</p>
                     <p>Precio ARS: {formatPct(point.price)}</p>
                     <p>Dólar: {formatPct(point.fx)}</p>
@@ -116,8 +116,8 @@ export function DashboardCharts({ filters, summary }: {
               </ScatterChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-orange-500" />Subió más que el dólar</span>
-              <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full border-2 border-blue-500" />Subió menos que el dólar</span>
+              <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full bg-red-400" />Subió más que el dólar</span>
+              <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full border-2 border-emerald-400" />Subió menos que el dólar</span>
               <span>Línea punteada: igual variación</span>
             </div>
           </CardContent>
@@ -169,7 +169,7 @@ function EvolutionChart({ series, currency }: {
         <ChartTooltip content={<ChartTooltipContent labelFormatter={(label) => dateLabel(String(label))}
           formatter={(value, name) => <span>{evolutionConfig[name as keyof typeof evolutionConfig]?.label ?? String(name)}: <span className="font-mono">{name === "rate" ? formatArs(Number(value)) : decimal(Number(value))}</span></span>} />} />
         <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
-        <Area yAxisId="index" dataKey="ars" fill="var(--color-ars)" fillOpacity={0.04} stroke="none" legendType="none" tooltipType="none" isAnimationActive={false} />
+        <Area yAxisId="index" dataKey="ars" fill="var(--color-ars)" fillOpacity={0.08} stroke="none" legendType="none" tooltipType="none" isAnimationActive={false} />
         <Line yAxisId="index" dataKey="ars" stroke="var(--color-ars)" strokeWidth={2} strokeOpacity={currency === "ARS" ? 1 : 0.4} dot={false} isAnimationActive={false} />
         <Line yAxisId="index" dataKey="usd" stroke="var(--color-usd)" strokeWidth={2} strokeOpacity={currency === "USD" ? 1 : 0.5} dot={false} isAnimationActive={false} />
         <Line yAxisId="fx" dataKey="rate" stroke="var(--color-rate)" strokeWidth={2} strokeDasharray="4 4" dot={false} isAnimationActive={false} />

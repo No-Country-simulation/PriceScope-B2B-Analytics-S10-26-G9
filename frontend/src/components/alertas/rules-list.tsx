@@ -2,11 +2,24 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { BellIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import {
+  BellIcon,
+  BellOffIcon,
+  EllipsisVerticalIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react"
 
-import { ToneBadge, type Tone } from "@/components/admin/tone"
+import { IconTile, ToneBadge } from "@/components/admin/tone"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -15,16 +28,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Switch } from "@/components/ui/switch"
 
 import { RULE_KIND_LABEL, type AlertRule } from "./data"
 
-const KIND_TONE: Record<AlertRule["kind"], Tone> = {
-  devaluation: "neutral",
-  hit: "sky",
-}
-
-// UX07 · Alertas, pestaña "Mis reglas": altas, pausas y borrado con
+// UX07 · Alertas, pestaña "Mis reglas": pausar/activar, editar y borrar con
 // confirmación. Las reglas todavía son de muestra; el alta entra después.
 export function RulesList({
   rules,
@@ -40,80 +65,97 @@ export function RulesList({
   return (
     <>
       <Card className="gap-0 py-0 shadow-xs">
-        {rules.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-5 py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              No tenés reglas activas. Creá una para que te avisemos cuando algo
-              suba más que la devaluación.
-            </p>
+        <CardHeader className="border-b py-(--card-spacing)">
+          <CardTitle>
+            <h3>Mis reglas</h3>
+          </CardTitle>
+          <CardDescription>
+            Pausá una regla para dejar de recibir sus alertas sin perderla.
+          </CardDescription>
+          <CardAction>
             <Button
+              variant="outline"
+              size="sm"
               nativeButton={false}
               render={<Link href="/user/regla-nueva" />}
             >
               <PlusIcon data-icon="inline-start" />
               Nueva regla
             </Button>
+          </CardAction>
+        </CardHeader>
+
+        {rules.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center text-sm text-muted-foreground">
+            <BellOffIcon className="size-6" />
+            <p>
+              No tenés reglas. Creá una para que te avisemos cuando algo suba
+              más que la devaluación.
+            </p>
           </div>
         ) : (
-          rules.map((rule) => (
-            <div
-              key={rule.id}
-              className="flex flex-wrap items-center gap-4 border-b px-5 py-4 last:border-b-0"
-            >
-              <span
-                className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-                aria-hidden="true"
-              >
-                <BellIcon className="size-4" />
-              </span>
-
-              <div className="flex min-w-0 flex-1 basis-[360px] flex-col gap-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">{rule.name}</span>
-                  <ToneBadge tone={KIND_TONE[rule.kind]}>
-                    {RULE_KIND_LABEL[rule.kind]}
-                  </ToneBadge>
-                  <ToneBadge tone={rule.active ? "emerald" : "neutral"}>
-                    {rule.active ? "Activa" : "Pausada"}
-                  </ToneBadge>
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {rule.phrase}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Última vez: {rule.lastFired ?? "nunca"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {rule.active ? "Activa" : "Pausada"}
-                </span>
-                <Switch
-                  checked={rule.active}
-                  onCheckedChange={() => onToggle(rule.id)}
-                  aria-label={`Activar o pausar la regla ${rule.name}`}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  nativeButton={false}
-                  render={<Link href="/user/regla-nueva" />}
-                >
-                  Editar
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setPending(rule)}
-                  aria-label={`Eliminar la regla ${rule.name}`}
-                >
-                  <Trash2Icon />
-                </Button>
-              </div>
-            </div>
-          ))
+          <ItemGroup className="gap-0 p-2">
+            {rules.map((rule, index) => (
+              <React.Fragment key={rule.id}>
+                {index > 0 && <ItemSeparator className="my-1" />}
+                <Item className={rule.active ? undefined : "opacity-70"}>
+                  <ItemMedia>
+                    <IconTile tone={rule.active ? "brand" : "neutral"}>
+                      {rule.active ? <BellIcon /> : <BellOffIcon />}
+                    </IconTile>
+                  </ItemMedia>
+                  <ItemContent className="min-w-0 basis-72">
+                    <ItemTitle className="flex-wrap">
+                      {rule.name}
+                      <ToneBadge tone={rule.kind === "hit" ? "sky" : "neutral"}>
+                        {RULE_KIND_LABEL[rule.kind]}
+                      </ToneBadge>
+                    </ItemTitle>
+                    <ItemDescription>{rule.phrase}</ItemDescription>
+                    <span className="text-xs text-muted-foreground">
+                      Última vez: {rule.lastFired ?? "nunca"}
+                    </span>
+                  </ItemContent>
+                  <ItemActions>
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="w-14 text-right">
+                        {rule.active ? "Activa" : "Pausada"}
+                      </span>
+                      <Switch
+                        checked={rule.active}
+                        onCheckedChange={() => onToggle(rule.id)}
+                        aria-label={`Activar o pausar la regla ${rule.name}`}
+                      />
+                    </label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button variant="ghost" size="icon-sm" />}
+                        aria-label={`Más acciones para ${rule.name}`}
+                      >
+                        <EllipsisVerticalIcon />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-40">
+                        <DropdownMenuItem
+                          render={<Link href="/user/regla-nueva" />}
+                        >
+                          <PencilIcon />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setPending(rule)}
+                        >
+                          <Trash2Icon />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </ItemActions>
+                </Item>
+              </React.Fragment>
+            ))}
+          </ItemGroup>
         )}
       </Card>
 
@@ -123,12 +165,10 @@ export function RulesList({
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              ¿Eliminar la regla «{pending?.name}»?
-            </DialogTitle>
+            <DialogTitle>¿Eliminar la regla «{pending?.name}»?</DialogTitle>
             <DialogDescription>
-              Dejarás de recibir estas alertas. Las alertas que ya se dispararon
-              quedan en la bandeja. Esta acción no se puede deshacer.
+              Dejarás de recibir estas alertas. Las alertas que ya se
+              dispararon quedan en la bandeja. Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -136,7 +176,7 @@ export function RulesList({
               Cancelar
             </Button>
             <Button
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => {
                 if (pending) onDelete(pending.id)
                 setPending(null)
