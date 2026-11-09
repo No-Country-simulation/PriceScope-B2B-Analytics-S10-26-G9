@@ -28,6 +28,15 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _regular_in_currency(
+    price: Decimal | None, local_price: Decimal, regular_price: Decimal | None
+) -> Decimal | None:
+    """Regular price in the selected currency, scaled like the current price."""
+    if price is None or regular_price is None or not local_price:
+        return None
+    return (price * regular_price / local_price).quantize(CENTS)
+
+
 def _spread(cells: list[MatrixCellOutput]) -> MatrixSpreadOutput | None:
     """Gap between the cheapest and the most expensive available offer."""
     offers = [c for c in cells if c.price is not None and c.available]
@@ -127,6 +136,8 @@ async def get_matrix(
             last.price_usd_blue,
             last.available,
             last.captured_at,
+            last.regular_price,
+            last.is_promo,
         )
         .join(last, last.listing_id == Listing.id)
         .join(Store, Store.id == Listing.store_id)
@@ -151,6 +162,8 @@ async def get_matrix(
             cells[key] = MatrixCellOutput(
                 store_slug=r.slug,
                 price=price,
+                regular_price=_regular_in_currency(price, r.local_price, r.regular_price),
+                is_promo=r.is_promo,
                 available=r.available,
                 captured_at=r.captured_at,
             )
@@ -166,14 +179,15 @@ async def get_matrix(
 
     items = []
     for pid in page_ids:
-        product_prices = sorted(by_product[pid], key=lambda c: c.store_slug)
+        product_cells = sorted(by_product[pid], key=lambda c: c.store_slug)
         items.append(
             MatrixRowOutput(
                 product_id=pid,
                 ean=details[pid].ean,
                 name=details[pid].name,
-                prices=product_prices,
-                spread=_spread(product_prices),
+                prices=product_cells,
+                spread=_spread(product_cells),
+                has_promotion=any(c.is_promo for c in product_cells),
             )
         )
 

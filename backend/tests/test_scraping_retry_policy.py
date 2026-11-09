@@ -1,4 +1,3 @@
-
 """Tests for VTEX scraping retry classification."""
 
 import httpx
@@ -38,9 +37,7 @@ async def test_classifies_http_failures(
             headers={"Retry-After": "120"},
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         with pytest.raises(VtexFetchError) as exc_info:
             await fetch_vtex_products(
                 client,
@@ -64,9 +61,7 @@ async def test_connection_error_is_retryable() -> None:
             request=request,
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         with pytest.raises(VtexFetchError) as exc_info:
             await fetch_vtex_products(
                 client,
@@ -87,9 +82,7 @@ async def test_invalid_json_is_not_retryable() -> None:
             content=b"invalid json",
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         with pytest.raises(VtexFetchError) as exc_info:
             await fetch_vtex_products(
                 client,
@@ -97,7 +90,4 @@ async def test_invalid_json_is_not_retryable() -> None:
                 term="leche",
             )
 
-    assert (
-        should_retry_vtex_error(exc_info.value)
-        is False
-    )
+    assert should_retry_vtex_error(exc_info.value) is False
