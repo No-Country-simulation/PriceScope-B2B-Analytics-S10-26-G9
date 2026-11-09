@@ -9,6 +9,7 @@ from app.api.v1 import (
     admin_users,
     auth,
     demo,
+    matrix,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -21,3 +22,4 @@ api_router.include_router(admin_users.router)
 api_router.include_router(admin_stores.router)
 api_router.include_router(admin_rates.router)
 api_router.include_router(admin_scraping.router)
+api_router.include_router(matrix.router)
