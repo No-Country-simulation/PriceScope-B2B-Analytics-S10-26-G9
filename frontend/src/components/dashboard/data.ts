@@ -7,12 +7,12 @@ export type Quote = "blue" | "oficial"
 export type Currency = "ARS" | "USD"
 
 export const CATEGORIES = [
-  { name: "Almacén", inflation: 21.3, products: 412, color: "#2563eb" },
-  { name: "Bebidas", inflation: 16.8, products: 238, color: "#ea580c" },
-  { name: "Lácteos", inflation: 19.9, products: 176, color: "#0d9488" },
-  { name: "Limpieza", inflation: 14.2, products: 204, color: "#9333ea" },
-  { name: "Electro", inflation: 12.1, products: 318, color: "#ca8a04" },
-  { name: "Indumentaria", inflation: 24.6, products: 287, color: "#db2777" },
+  { name: "Almacén", inflation: 21.3, products: 412, color: "#6366f1" },
+  { name: "Bebidas", inflation: 16.8, products: 238, color: "#f59e0b" },
+  { name: "Lácteos", inflation: 19.9, products: 176, color: "#14b8a6" },
+  { name: "Limpieza", inflation: 14.2, products: 204, color: "#a78bfa" },
+  { name: "Electro", inflation: 12.1, products: 318, color: "#38bdf8" },
+  { name: "Indumentaria", inflation: 24.6, products: 287, color: "#f472b6" },
 ] as const
 
 const DAY = 86_400_000

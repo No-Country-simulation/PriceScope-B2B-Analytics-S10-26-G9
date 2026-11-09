@@ -1,23 +1,56 @@
 import type { ReactNode } from "react"
+
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
-export function SiteHeader({ title, section, children }: {
+export function SiteHeader({
+  title,
+  section,
+  children,
+}: {
   title: string
   section?: string
   children?: ReactNode
 }) {
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
-      <div className="flex min-w-0 w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
-        <SidebarTrigger className="-ml-1" />
+    <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60 rounded-t-[inherit]">
+      {/* Same width and gutters as the page container (@container/main), so
+          the header lines up with the content when the sidebar toggles. */}
+      <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center gap-2 px-4 lg:px-6">
+        <SidebarTrigger className="-ml-2" />
         <Separator
           orientation="vertical"
-          className="mx-2 h-4 data-vertical:self-auto"
+          className="mr-2 h-4 data-vertical:self-auto"
         />
-        {section && <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">{section} /</span>}
-        <h1 className="min-w-0 truncate text-base font-medium">{title}</h1>
-        {children && <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">{children}</div>}
+        <Breadcrumb className="min-w-0">
+          <BreadcrumbList className="flex-nowrap">
+            {section && (
+              <>
+                <BreadcrumbItem className="hidden sm:inline-flex">
+                  {section}
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden sm:block" />
+              </>
+            )}
+            <BreadcrumbItem className="min-w-0">
+              <BreadcrumbPage className="truncate font-medium">
+                <h1>{title}</h1>
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        {children && (
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {children}
+          </div>
+        )}
       </div>
     </header>
   )

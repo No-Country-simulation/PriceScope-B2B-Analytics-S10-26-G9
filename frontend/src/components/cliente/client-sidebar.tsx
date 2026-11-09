@@ -8,12 +8,11 @@ import {
   ChartNoAxesCombinedIcon,
   Grid3X3Icon,
   LayoutDashboardIcon,
-  PackageIcon,
   PlusIcon,
   ShieldCheckIcon,
 } from "lucide-react"
 
-import { AdminUserMenu, SwitchAppLink } from "@/components/admin/admin-sidebar"
+import { SwitchAppLink } from "@/components/admin/admin-sidebar"
 import {
   Sidebar,
   SidebarContent,
@@ -26,7 +25,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Skeleton } from "@/components/ui/skeleton"
+import { QuotesCard } from "@/components/cliente/quotes-card"
 import type { CurrentUser } from "@/lib/api"
 
 export const clientNav = [
@@ -34,8 +33,13 @@ export const clientNav = [
     label: "Análisis",
     items: [
       { title: "Dashboard", url: "/user/dashboard", icon: LayoutDashboardIcon },
-      { title: "Matriz de precios", url: "/user/matriz", icon: Grid3X3Icon },
-      { title: "Ficha de producto", url: "/user/producto", icon: PackageIcon },
+      {
+        title: "Matriz de precios",
+        url: "/user/matriz",
+        icon: Grid3X3Icon,
+        // La ficha de producto se abre desde la matriz y la deja marcada.
+        also: ["/user/producto"],
+      },
     ],
   },
   {
@@ -47,13 +51,20 @@ export const clientNav = [
   },
 ]
 
-export function clientPageTitle(pathname: string) {
-  return (
-    clientNav
-      .flatMap((group) => group.items)
-      .find((item) => pathname.startsWith(item.url))?.title ??
-    "PriceScope"
-  )
+// Pantallas fuera del menú: título y miga de pan propios.
+const extraPages = [
+  { url: "/user/producto", title: "Ficha de producto", section: "Matriz de precios" },
+  { url: "/user/perfil", title: "Perfil", section: "Cuenta" },
+]
+
+export function clientPage(pathname: string): { title: string; section?: string } {
+  const extra = extraPages.find((page) => pathname.startsWith(page.url))
+  if (extra) return extra
+  for (const group of clientNav) {
+    const item = group.items.find((entry) => pathname.startsWith(entry.url))
+    if (item) return { title: item.title, section: group.label }
+  }
+  return { title: "PriceScope" }
 }
 
 export function ClientSidebar({
@@ -92,19 +103,7 @@ export function ClientSidebar({
             icon={ShieldCheckIcon}
           />
         )}
-        {user ? (
-          <AdminUserMenu user={user} />
-        ) : (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              {/* Not SidebarMenuSkeleton: its random width breaks hydration. */}
-              <div className="flex h-12 items-center gap-2 p-2">
-                <Skeleton className="size-8 rounded-lg" />
-                <Skeleton className="h-4 flex-1" />
-              </div>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        )}
+        <QuotesCard />
       </SidebarFooter>
     </Sidebar>
   )
@@ -124,7 +123,12 @@ function ClientNavGroups({ pathname }: { pathname: string | null }) {
             <SidebarMenuItem key={item.url}>
               <SidebarMenuButton
                 tooltip={item.title}
-                isActive={pathname?.startsWith(item.url) ?? false}
+                isActive={
+                  pathname != null &&
+                  [item.url, ...(("also" in item && item.also) || [])].some((url) =>
+                    pathname.startsWith(url)
+                  )
+                }
                 render={<Link href={item.url} />}
                 className="data-active:bg-brand/10 data-active:text-brand-deep dark:data-active:text-indigo-300"
               >
