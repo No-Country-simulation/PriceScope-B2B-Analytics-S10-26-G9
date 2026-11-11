@@ -4,6 +4,36 @@ El frontend de Alertas ya está maquetado y funciona con datos de muestra. Este 
 
 **Alcance de esta versión: las alertas solo se muestran dentro de la app** (bandeja de Alertas y campana del header). El aviso por correo queda para después, pero el modelo ya lo contempla para no tener que migrar de nuevo (ver [Correo](#8-correo-más-adelante)).
 
+## Estado (al 11/11/2026)
+
+Está hecho el **PR 1** de la [§11](#11-orden-sugerido-de-prs) (modelos, enums y migración, PR #30). Falta todo lo demás.
+
+| § | Qué | Estado | Dónde |
+| --- | --- | --- | --- |
+| 3 | Tablas `alert_rules`, `fired_alerts`, `fired_alert_items` con CHECKs, UNIQUE e índices | ✅ Hecho | `app/models/alert_rule.py`, `app/models/fired_alert.py`, migración `20261110_1727-828e90f76869_add_alert_tables.py` |
+| 3 | Enums `AlertRuleKind`, `AlertRuleScope`, `MilestoneKey` | ✅ Hecho | `app/models/enums.py` |
+| 3 | Modelos importados en `app/models/__init__.py` | ✅ Hecho | |
+| 10 | Tests de modelo: regla válida, rechazo de combinaciones inválidas, una alerta por regla y día | ✅ Hecho | `tests/test_alert_models.py` |
+| 4 | Servicio `app/services/alerts.py` (`evaluate_rule`, devaluación, variación, reduflación, regla de 7 días, constante de hitos) | ⏳ Falta | |
+| 5.1 | Endpoints de reglas (CRUD, `preview`, `options`) + `app/schemas/alerts.py` + router registrado | ⏳ Falta | |
+| 5.2 | Endpoints de alertas disparadas (`/alerts`, `/alerts/{id}`, `summary`, `seen`) | ⏳ Falta | |
+| 6 | Tarea ARQ `evaluate_alert_rules` y su cron | ⏳ Falta | `app/workers/tasks.py` |
+| 9 | Prellenado desde la ficha y el dashboard | ⏳ Falta | |
+| 10 | `tests/test_alerts.py` (CRUD, aislamiento, validaciones, cálculo, worker) | ⏳ Falta | |
+| 8 | Correo | Fuera de alcance | |
+
+Diferencias con lo que dice este documento:
+
+- `milestone_key` quedó como enum (`enum_column`, VARCHAR + CHECK) en lugar de `String(30)`.
+- El índice de la bandeja es `(user_id, fired_at)` sin `DESC`. No cambia nada, porque Postgres puede recorrer el índice en orden inverso.
+
+Dependencias de la [§7](#7-dependencias-y-decisiones-pendientes) que siguen abiertas:
+
+- **Categorías:** `canonical_products` todavía solo tiene `ean` y `name`.
+- **Fuente de la cotización:** todavía no está fijada en `settings`.
+- **Búsqueda de productos:** no existen `GET /products?q=` ni `GET /products/{id}`.
+- **Ya disponible:** `stores.visible_store_ids`.
+
 ## 1. Pantallas que consumen esto
 
 | Ruta | Archivo del front | Qué necesita |
@@ -385,7 +415,7 @@ Los cambios en el front (leer los query params y cambiar las URLs de los botones
 
 ## 11. Orden sugerido de PRs
 
-1. Modelos + migración (`alert_rules`, `fired_alerts`, `fired_alert_items`) + enums.
+1. ✅ Modelos + migración (`alert_rules`, `fired_alerts`, `fired_alert_items`) + enums. *(Hecho en el PR #30.)*
 2. CRUD de reglas + `options` + tests. Con esto el front ya puede crear, listar, pausar y borrar.
 3. `services/alerts.evaluate_rule` + `preview` + tests del cálculo.
 4. Worker `evaluate_alert_rules` + endpoints de alertas disparadas (`/alerts`, `summary`, `seen`).
