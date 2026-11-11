@@ -53,6 +53,12 @@ export function formatUsd(value: number, rate: number) {
   return "US$ " + groupThousands(whole) + "," + cents
 }
 
+// Conteos (productos, errores): mismo agrupado que los precios, para que el
+// server y el browser coincidan.
+export function formatCount(value: number) {
+  return groupThousands(String(value))
+}
+
 // Variación porcentual: "+12,4 %" o "−3,1 %" (signo menos tipográfico).
 export function formatPct(value: number) {
   const sign = value >= 0 ? "+" : "−"
