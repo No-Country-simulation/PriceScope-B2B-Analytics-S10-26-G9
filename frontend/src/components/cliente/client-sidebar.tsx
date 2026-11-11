@@ -54,7 +54,7 @@ export const clientNav = [
 // Pantallas fuera del menú: título y miga de pan propios.
 const extraPages = [
   { url: "/user/producto", title: "Ficha de producto", section: "Matriz de precios" },
-  { url: "/user/perfil", title: "Perfil", section: "Cuenta" },
+  { url: "/user/perfil", title: "Mi cuenta", section: "Cuenta" },
 ]
 
 export function clientPage(pathname: string): { title: string; section?: string } {

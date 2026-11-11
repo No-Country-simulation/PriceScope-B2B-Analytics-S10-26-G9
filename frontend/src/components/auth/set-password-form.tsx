@@ -9,8 +9,6 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   CircleIcon,
-  EyeIcon,
-  EyeOffIcon,
   Loader2Icon,
   LinkIcon,
 } from "lucide-react"
@@ -22,6 +20,8 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError, apiFetch, type TokenStatus, type TokenType } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { passwordRules } from "@/lib/password"
+import { PasswordField } from "@/components/auth/password-field"
 
 // "define": first password, from the welcome email the admin triggers.
 // "reset": new password, from the link the user asked for in /recuperar.
@@ -70,17 +70,6 @@ const COPY = {
 } satisfies Record<Mode, unknown>
 
 // Same rules the backend enforces. The submit stays disabled until all pass.
-function passwordRules(password: string, confirmation: string) {
-  return [
-    { label: "Mínimo 8 caracteres", ok: password.length >= 8 },
-    { label: "Una mayúscula", ok: /[A-ZÁÉÍÓÚÑ]/.test(password) },
-    { label: "Un número", ok: /[0-9]/.test(password) },
-    {
-      label: "Las contraseñas coinciden",
-      ok: password.length > 0 && password === confirmation,
-    },
-  ]
-}
 
 type LinkState =
   | { state: "loading" }
@@ -358,49 +347,6 @@ function PasswordForm({
 
       <p className="text-sm text-muted-foreground">{copy.footnote}</p>
     </form>
-  )
-}
-
-function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string
-  label: string
-  value: string
-  onChange: (value: string) => void
-}) {
-  const [shown, setShown] = React.useState(false)
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <Input
-          id={id}
-          name={id}
-          type={shown ? "text" : "password"}
-          autoComplete="new-password"
-          required
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          aria-describedby="password-rules"
-          className="h-10 pr-10"
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
-          onClick={() => setShown((value) => !value)}
-          aria-label={shown ? "Ocultar contraseña" : "Mostrar contraseña"}
-          aria-pressed={shown}
-        >
-          {shown ? <EyeOffIcon /> : <EyeIcon />}
-        </Button>
-      </div>
-    </div>
   )
 }
 

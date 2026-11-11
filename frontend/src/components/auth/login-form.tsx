@@ -44,6 +44,8 @@ export function LoginForm() {
   const next = safeNextPath(searchParams.get("next"))
   const sessionExpired =
     expired || searchParams.get("motivo") === "sesion-vencida"
+  const passwordChanged = searchParams.get("motivo") === "contrasena-actualizada"
+  const accountDeactivated = searchParams.get("motivo") === "cuenta-desactivada"
 
   // Someone who already has a session goes straight to their home.
   React.useEffect(() => {
@@ -105,6 +107,16 @@ export function LoginForm() {
         <Alert variant="destructive">
           <CircleAlertIcon />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : accountDeactivated ? (
+        <Alert>
+          <InfoIcon />
+          <AlertDescription>Tu cuenta fue dada de baja y se cerraron tus sesiones. Para consultar sobre tu acceso, contactá al equipo de PriceScope.</AlertDescription>
+        </Alert>
+      ) : passwordChanged ? (
+        <Alert>
+          <InfoIcon />
+          <AlertDescription>Contraseña actualizada. Se cerraron tus sesiones; ingresá con la nueva contraseña.</AlertDescription>
         </Alert>
       ) : sessionExpired ? (
         <Alert>

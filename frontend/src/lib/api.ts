@@ -29,6 +29,13 @@ export type CurrentUser = {
   store_ids: string[]
 }
 
+export type ProfileDetails = Pick<CurrentUser, "name" | "company">
+export type PasswordChange = { current_password: string; new_password: string }
+export type AccountDeactivation = {
+  current_password: string
+  confirmation: "ELIMINAR MI CUENTA"
+}
+
 export type TokenType = "set_password" | "reset_password"
 
 // Answer of /auth/token/verify. email and company only come for a valid link.
