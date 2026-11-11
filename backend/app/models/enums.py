@@ -34,3 +34,20 @@ class StoreCategory(StrEnum):
 class RateType(StrEnum):
     OFFICIAL = "official"
     BLUE = "blue"
+
+
+class AlertRuleKind(StrEnum):
+    DEVALUATION = "devaluation"
+    MILESTONE = "milestone"
+
+
+class AlertRuleScope(StrEnum):
+    CATEGORY = "category"
+    PRODUCT = "product"
+
+
+class MilestoneKey(StrEnum):
+    CYBERWEEK = "cyberweek"
+    BLACK_FRIDAY = "black_friday"
+    HOT_SALE = "hot_sale"
+    CUSTOM = "custom"
