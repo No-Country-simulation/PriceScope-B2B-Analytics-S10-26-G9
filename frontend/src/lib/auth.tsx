@@ -6,6 +6,9 @@ import {
   ApiError,
   apiFetch,
   type CurrentUser,
+  type ProfileDetails,
+  type PasswordChange,
+  type AccountDeactivation,
   type Role,
   type TokenOutput,
 } from "@/lib/api"
@@ -20,6 +23,7 @@ export const HOME_BY_ROLE: Record<Role, string> = {
 export const SESSION_EXPIRED_PARAM = "motivo=sesion-vencida"
 
 type Status = "loading" | "authenticated" | "anonymous"
+type SessionNotice = "contrasena-actualizada" | "cuenta-desactivada" | null
 
 type AuthContextValue = {
   status: Status
@@ -27,9 +31,13 @@ type AuthContextValue = {
   // True when a session we had stopped being accepted (inactivity or
   // expiry), as opposed to never having logged in.
   expired: boolean
+  sessionNotice: SessionNotice
   login: (email: string, password: string) => Promise<CurrentUser>
   logout: () => Promise<void>
   request: <T>(path: string, init?: RequestInit) => Promise<T>
+  updateProfile: (profile: ProfileDetails) => Promise<void>
+  changePassword: (data: PasswordChange) => Promise<void>
+  deactivateAccount: (data: AccountDeactivation) => Promise<void>
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null)
@@ -53,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = React.useState<Status>("loading")
   const [user, setUser] = React.useState<CurrentUser | null>(null)
   const [expired, setExpired] = React.useState(false)
+  const [sessionNotice, setSessionNotice] = React.useState<SessionNotice>(null)
   // Settles once the session from a previous visit has been restored (or
   // found missing). request() waits on it, so pages can mount and start
   // loading before the session is known.
@@ -116,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       setUser(me)
       setExpired(false)
+      setSessionNotice(null)
       setStatus("authenticated")
       return me
     }
@@ -131,15 +141,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tokenRef.current = null
       setUser(null)
       setExpired(false)
+      setSessionNotice(null)
       setStatus("anonymous")
     }
 
-    return { request, login, logout }
+    async function updateProfile(profile: ProfileDetails) {
+      const updated = await request<ProfileDetails>("/account/profile", {
+        method: "PATCH",
+        body: JSON.stringify(profile),
+      })
+      // El menú y la ficha comparten los datos devueltos por el servidor.
+      setUser((current) => current ? { ...current, ...updated } : null)
+    }
+
+    function endRevokedSession(notice: SessionNotice) {
+      // La API ya revocó todas las sesiones y borró la cookie de refresco.
+      // No llamar a logout(): intentaría refrescar una sesión ya revocada.
+      tokenRef.current = null
+      setUser(null)
+      setExpired(false)
+      setSessionNotice(notice)
+      setStatus("anonymous")
+    }
+
+    async function changePassword(data: PasswordChange) {
+      await request<{ message: string }>("/account/password", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      })
+      endRevokedSession("contrasena-actualizada")
+    }
+
+    async function deactivateAccount(data: AccountDeactivation) {
+      await request<{ message: string }>("/account", {
+        method: "DELETE",
+        body: JSON.stringify(data),
+      })
+      endRevokedSession("cuenta-desactivada")
+    }
+
+    return { request, login, logout, updateProfile, changePassword, deactivateAccount }
   }, [ready])
 
   const value = React.useMemo(
-    () => ({ status, user, expired, ...actions }),
-    [status, user, expired, actions]
+    () => ({ status, user, expired, sessionNotice, ...actions }),
+    [status, user, expired, sessionNotice, actions]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -19,18 +19,20 @@ import { SESSION_EXPIRED_PARAM, useAuth } from "@/lib/auth"
 // sent to the login. The backend still has to enforce access to real data.
 export function ClientShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { status, user, expired } = useAuth()
+  const { status, user, expired, sessionNotice } = useAuth()
 
   React.useEffect(() => {
     if (status === "anonymous") {
       const next = `next=${encodeURIComponent(window.location.pathname)}`
       router.replace(
-        expired
+        sessionNotice
+          ? `/ingresar?motivo=${sessionNotice}&${next}`
+          : expired
           ? `/ingresar?${SESSION_EXPIRED_PARAM}&${next}`
           : `/ingresar?${next}`
       )
     }
-  }, [status, expired, router])
+  }, [status, expired, sessionNotice, router])
 
   // While the session is being restored the shell renders as usual; only a
   // missing session blocks the page.

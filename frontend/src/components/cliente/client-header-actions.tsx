@@ -161,7 +161,7 @@ function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/user/perfil" />}>
           <UserIcon />
-          Perfil
+          Mi cuenta
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => logout()}>
