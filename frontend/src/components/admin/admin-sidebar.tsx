@@ -31,10 +31,8 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -46,11 +44,9 @@ import { useAuth } from "@/lib/auth"
 export const adminNav = [
   { title: "Solicitudes de demo", url: "/admin/solicitudes", icon: InboxIcon },
   { title: "Usuarios", url: "/admin/usuarios", icon: UsersIcon },
+  { title: "Curaduría", url: "/admin/curaduria", icon: ListChecksIcon },
   { title: "Operación", url: "/admin/operacion", icon: ActivityIcon },
 ]
-
-// Sections from E12 · Panel de administración v2, shown but not reachable yet.
-const adminNavLater = [{ title: "Curaduría", icon: ListChecksIcon }]
 
 export function adminPageTitle(pathname: string) {
   return (
@@ -91,26 +87,6 @@ export function AdminSidebar({
             <React.Suspense fallback={<AdminNavMenu pathname={null} />}>
               <ActiveAdminNavMenu />
             </React.Suspense>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Próximamente</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {adminNavLater.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    disabled
-                    aria-disabled
-                    className="text-muted-foreground"
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuBadge>v2</SidebarMenuBadge>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
