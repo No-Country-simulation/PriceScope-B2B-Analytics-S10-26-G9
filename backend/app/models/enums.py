@@ -31,6 +31,17 @@ class StoreCategory(StrEnum):
     FASHION = "fashion"
 
 
+class ProductCategory(StrEnum):
+    """Categories shown to clients. Store trees are mapped to these (services/catalog.py)."""
+
+    ALMACEN = "almacen"
+    BEBIDAS = "bebidas"
+    LACTEOS = "lacteos"
+    LIMPIEZA = "limpieza"
+    ELECTRO = "electro"
+    INDUMENTARIA = "indumentaria"
+
+
 class RateType(StrEnum):
     OFFICIAL = "official"
     BLUE = "blue"

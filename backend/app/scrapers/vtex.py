@@ -77,6 +77,12 @@ def parse_vtex_product(
         if isinstance(first, str) and len(first) <= 160:
             category = first
 
+    brand = product.get("brand")
+    if not isinstance(brand, str) or not brand.strip() or len(brand.strip()) > 120:
+        brand = None
+    else:
+        brand = brand.strip()
+
     items = product.get("items")
     if not isinstance(items, list):
         return []
@@ -143,6 +149,7 @@ def parse_vtex_product(
                     category=category,
                     unit=unit,
                     ean=ean,
+                    brand=brand,
                 )
             )
 

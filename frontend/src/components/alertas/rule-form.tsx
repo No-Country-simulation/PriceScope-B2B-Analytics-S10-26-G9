@@ -15,7 +15,6 @@ import { toast } from "sonner"
 
 import { PageHeader } from "@/components/admin/page-header"
 import { ToneBadge } from "@/components/admin/tone"
-import { productHref } from "@/components/producto/data"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -61,6 +60,7 @@ import {
   type HitoId,
   type Period,
   type RuleDraft,
+  productHref,
 } from "./rule-data"
 
 const KIND_OPTIONS = [

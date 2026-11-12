@@ -6,7 +6,17 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.database import SessionLocal
-from app.models import ExchangeRate, Listing, Price, RateType, Store, StoreCategory, StoreLocation
+from app.models import (
+    CanonicalProduct,
+    ExchangeRate,
+    Listing,
+    Price,
+    ProductCategory,
+    RateType,
+    Store,
+    StoreCategory,
+    StoreLocation,
+)
 from app.services.prices import ScrapedObservation, record_observation
 
 
@@ -276,3 +286,70 @@ async def test_rejects_inactive_location() -> None:
             )
 
         await db.rollback()
+
+
+async def test_canonical_product_gets_category_brand_and_content() -> None:
+    store_id = await prepare()
+    async with SessionLocal() as db:
+        price = await record_observation(
+            db,
+            observation(
+                store_id,
+                name="Café Molido Intenso x450g",
+                ean="07790000000418",
+                category="/Almacén/Infusiones/",
+                brand="Aroma Andino",
+            ),
+        )
+        product = await db.scalar(select(CanonicalProduct))
+
+    assert price is not None
+    assert price.grammage == Decimal("450")
+    assert price.unit == "g"
+    assert product is not None
+    assert product.category == ProductCategory.ALMACEN
+    assert product.brand == "Aroma Andino"
+    assert product.content == "450 g"
+    assert product.grammage == Decimal("450")
+    assert product.unit == "g"
+
+
+async def test_canonical_product_only_fills_missing_attributes() -> None:
+    store_id = await prepare()
+    async with SessionLocal() as db:
+        await record_observation(
+            db, observation(store_id, name="Detergente 750 ml", ean="07790000002231")
+        )
+        # Another store publishes the same EAN with less content (shrinkflation) and a category.
+        await record_observation(
+            db,
+            observation(
+                store_id,
+                external_code="SKU-2",
+                name="Detergente 700 ml",
+                ean="07790000002231",
+                category="/Limpieza/",
+                brand="Brillo Hogar",
+            ),
+        )
+        product = await db.scalar(select(CanonicalProduct))
+        grammages = list(await db.scalars(select(Price.grammage).order_by(Price.grammage)))
+
+    assert product is not None
+    assert product.content == "750 ml"
+    assert product.category == ProductCategory.LIMPIEZA
+    assert product.brand == "Brillo Hogar"
+    # Each price keeps the content it was published with.
+    assert grammages == [Decimal("700"), Decimal("750")]
+
+
+async def test_scraper_grammage_wins_over_the_name() -> None:
+    store_id = await prepare()
+    async with SessionLocal() as db:
+        price = await record_observation(
+            db,
+            observation(store_id, name="Leche 1 L", grammage=Decimal("900"), unit="ml"),
+        )
+
+    assert price is not None
+    assert price.grammage == Decimal("900")

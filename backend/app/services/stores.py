@@ -30,6 +30,17 @@ async def visible_store_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
     return list(await db.scalars(select(UserStore.store_id).where(UserStore.user_id == user.id)))
 
 
+async def visible_stores(db: AsyncSession, user: User) -> list[Store]:
+    """Active stores the user can see, for the client screens (matrix columns, filters)."""
+    store_ids = await visible_store_ids(db, user)
+    if not store_ids:
+        return []
+    rows = await db.scalars(
+        select(Store).where(Store.id.in_(store_ids), Store.active.is_(True)).order_by(Store.name)
+    )
+    return list(rows)
+
+
 async def assign_store(
     db: AsyncSession, user_id: uuid.UUID, store_id: uuid.UUID, admin_id: uuid.UUID
 ) -> None:

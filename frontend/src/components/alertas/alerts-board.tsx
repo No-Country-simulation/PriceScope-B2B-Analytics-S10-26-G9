@@ -46,9 +46,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatPct, formatPP } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-import { productHref } from "@/components/producto/data"
 
 import { ALERTS, RULES, type AlertRule, type FiredAlert } from "./data"
+import { productHref } from "./rule-data"
 import { RulesList } from "./rules-list"
 
 // UX07 · Alertas: KPIs, bandeja de alertas disparadas + detalle de la elegida,

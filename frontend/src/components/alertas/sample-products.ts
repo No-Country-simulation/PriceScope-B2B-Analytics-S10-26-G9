@@ -1,6 +1,6 @@
-// Muestra de la maqueta UX05 · Matriz de precios. Todavía no hay API: los
-// productos son de ejemplo y se reemplazan por el catálogo real cuando entre
-// el backend.
+// Productos de muestra para las alertas (UX07), que todavía no tienen API.
+// Antes alimentaban la matriz; la matriz y la ficha ya leen GET /matrix y
+// GET /products. Se borra cuando se conecten las alertas.
 
 export const STORES = [
   "Supermercado Delta",

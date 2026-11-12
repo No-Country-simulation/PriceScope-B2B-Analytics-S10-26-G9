@@ -13,6 +13,7 @@ import { ClientHeaderActions } from "@/components/cliente/client-header-actions"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { SESSION_EXPIRED_PARAM, useAuth } from "@/lib/auth"
+import { RatesProvider } from "@/lib/rates"
 
 // Client-side guard for the client app (/user), same shape as AdminShell.
 // Any logged-in user may enter, admins included; only a missing session is
@@ -49,6 +50,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <RatesProvider>
     <SidebarProvider
       style={
         {
@@ -70,6 +72,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
       </SidebarInset>
       <Toaster position="top-center" />
     </SidebarProvider>
+    </RatesProvider>
   )
 }
 

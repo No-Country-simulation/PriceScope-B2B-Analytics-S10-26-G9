@@ -1,7 +1,16 @@
-"""Price matrix: latest price of each canonical product in each visible store."""
+"""Price matrix: latest price of each canonical product in each visible store.
 
+Spread, 30-day variation and shrinkflation are computed for every visible product,
+then search, filters, sort and pagination are applied, because the client can sort
+and filter by those computed values. Fine for the current catalog (a few thousand
+products); if it grows, move the variation to a TimescaleDB continuous aggregate.
+"""
+
+import unicodedata
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -9,7 +18,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.models import CanonicalProduct, Listing, Price, Store, User
+from app.models import CanonicalProduct, Listing, Price, ProductCategory, Store, User
 from app.schemas.matrix import (
     Currency,
     MatrixCellOutput,
@@ -17,15 +26,23 @@ from app.schemas.matrix import (
     MatrixRowOutput,
     MatrixSpreadOutput,
     MatrixStoreOutput,
+    MatrixSummaryOutput,
     Rate,
+    Signal,
+    Sort,
 )
+from app.services.catalog import content_label
+from app.services.shrinkflation import SHRINKFLATION_DAYS, shrinkflation_by_listing
 from app.services.stores import visible_store_ids
 
 CENTS = Decimal("0.01")
+VARIATION_DAYS = 30
 
 
-def _escape_like(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+def _fold(text: str) -> str:
+    """Lowercase without accents, for search."""
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn").lower()
 
 
 def _regular_in_currency(
@@ -60,6 +77,98 @@ def _spread(cells: list[MatrixCellOutput]) -> MatrixSpreadOutput | None:
     )
 
 
+@dataclass
+class _Latest:
+    listing_id: uuid.UUID
+    product_id: uuid.UUID
+    store_slug: str
+    local_price: Decimal
+    usd_official: Decimal | None
+    usd_blue: Decimal | None
+    regular_price: Decimal | None
+    is_promo: bool
+    available: bool
+    captured_at: datetime
+    grammage: Decimal | None
+    unit: str | None
+
+
+async def _latest_prices(
+    db: AsyncSession, store_ids: list[uuid.UUID], min_stores: int
+) -> list[_Latest]:
+    """Latest national price (no branch) of every linked listing in the visible stores."""
+    comparable = (
+        select(Listing.canonical_product_id)
+        .where(Listing.store_id.in_(store_ids), Listing.canonical_product_id.is_not(None))
+        .group_by(Listing.canonical_product_id)
+        .having(func.count(func.distinct(Listing.store_id)) >= min_stores)
+    )
+    latest = (
+        select(Price)
+        .ext(distinct_on(Price.listing_id))
+        .join(Listing, Listing.id == Price.listing_id)
+        .where(
+            Price.location_id.is_(None),
+            Listing.store_id.in_(store_ids),
+            Listing.canonical_product_id.in_(comparable),
+        )
+        .order_by(Price.listing_id, Price.captured_at.desc())
+        .subquery()
+    )
+    last = aliased(Price, latest)
+    rows = await db.execute(
+        select(
+            last.listing_id,
+            Listing.canonical_product_id,
+            Store.slug,
+            last.local_price,
+            last.price_usd_official,
+            last.price_usd_blue,
+            last.regular_price,
+            last.is_promo,
+            last.available,
+            last.captured_at,
+            last.grammage,
+            last.unit,
+        )
+        .join(Listing, Listing.id == last.listing_id)
+        .join(Store, Store.id == Listing.store_id)
+    )
+    return [_Latest(*row) for row in rows]
+
+
+async def _regular_prices_at(
+    db: AsyncSession, listing_ids: list[uuid.UUID], cutoff: datetime
+) -> dict[uuid.UUID, Decimal]:
+    """Regular price (no promo) of each listing at the cutoff: its last capture before it."""
+    if not listing_ids:
+        return {}
+    rows = await db.execute(
+        select(Price.listing_id, func.coalesce(Price.regular_price, Price.local_price))
+        .ext(distinct_on(Price.listing_id))
+        .where(
+            Price.listing_id.in_(listing_ids),
+            Price.location_id.is_(None),
+            Price.captured_at <= cutoff,
+        )
+        .order_by(Price.listing_id, Price.captured_at.desc())
+    )
+    return {listing_id: price for listing_id, price in rows}
+
+
+def _matches(row: MatrixRowOutput, needle: str) -> bool:
+    haystack = " ".join(filter(None, [row.name, row.brand, row.ean]))
+    return needle in _fold(haystack)
+
+
+def _sort_key(sort: Sort):
+    if sort == "spread":
+        return lambda r: (r.spread is None, -(r.spread.percentage if r.spread else 0), r.name)
+    if sort == "variation":
+        return lambda r: (r.variation_30d is None, -(r.variation_30d or 0), r.name)
+    return lambda r: (_fold(r.name), str(r.product_id))
+
+
 async def get_matrix(
     db: AsyncSession,
     user: User,
@@ -70,18 +179,27 @@ async def get_matrix(
     min_stores: int,
     page: int,
     size: int,
+    category: ProductCategory | None = None,
+    signal: Signal | None = None,
+    sort: Sort = "name",
+    now: datetime | None = None,
 ) -> MatrixOutput:
+    now = now or datetime.now(UTC)
     store_ids = await visible_store_ids(db, user)
     effective_rate = rate if currency == "usd" else None
 
-    stores = list(
-        await db.scalars(
-            select(Store)
-            .where(Store.id.in_(store_ids), Store.active.is_(True))
-            .order_by(Store.name)
+    stores = (
+        list(
+            await db.scalars(
+                select(Store)
+                .where(Store.id.in_(store_ids), Store.active.is_(True))
+                .order_by(Store.name)
+            )
         )
+        if store_ids
+        else []
     )
-    empty = MatrixOutput(
+    output = MatrixOutput(
         items=[],
         total=0,
         page=page,
@@ -89,83 +207,51 @@ async def get_matrix(
         currency=currency,
         rate=effective_rate,
         stores=[MatrixStoreOutput(slug=s.slug, name=s.name) for s in stores],
+        summary=MatrixSummaryOutput(
+            products=0, average_spread=None, with_promotion=0, with_shrinkflation=0
+        ),
     )
     if not stores:
-        return empty
+        return output
 
-    # 1) Products to show on this page.
-    filters = [Listing.store_id.in_(store_ids), Listing.canonical_product_id.is_not(None)]
-    if q:
-        filters.append(CanonicalProduct.name.ilike(f"%{_escape_like(q.strip())}%", escape="\\"))
+    latest = await _latest_prices(db, [s.id for s in stores], min_stores)
+    if not latest:
+        return output
 
-    products = (
-        select(CanonicalProduct.id)
-        .join(Listing, Listing.canonical_product_id == CanonicalProduct.id)
-        .where(*filters)
-        .group_by(CanonicalProduct.id)
-        .having(func.count(func.distinct(Listing.store_id)) >= min_stores)
-    )
-    total = await db.scalar(select(func.count()).select_from(products.subquery())) or 0
-    if total == 0:
-        return empty
-
-    page_ids = list(
-        await db.scalars(
-            products.order_by(CanonicalProduct.name, CanonicalProduct.id)
-            .offset((page - 1) * size)
-            .limit(size)
-        )
+    listing_ids = [p.listing_id for p in latest]
+    old_prices = await _regular_prices_at(db, listing_ids, now - timedelta(days=VARIATION_DAYS))
+    shrinks = await shrinkflation_by_listing(
+        db, listing_ids, now - timedelta(days=SHRINKFLATION_DAYS)
     )
 
-    # 2) Latest national price (no branch) per listing.
-    latest = (
-        select(Price)
-        .ext(distinct_on(Price.listing_id))
-        .where(Price.location_id.is_(None))
-        .order_by(Price.listing_id, Price.captured_at.desc())
-        .subquery()
-    )
-    last = aliased(Price, latest)
-
-    rows = await db.execute(
-        select(
-            Listing.canonical_product_id,
-            Store.slug,
-            last.local_price,
-            last.price_usd_official,
-            last.price_usd_blue,
-            last.available,
-            last.captured_at,
-            last.regular_price,
-            last.is_promo,
-        )
-        .join(last, last.listing_id == Listing.id)
-        .join(Store, Store.id == Listing.store_id)
-        .where(Listing.canonical_product_id.in_(page_ids), Listing.store_id.in_(store_ids))
-    )
-
-    # 3) One cell per (product, store): the cheapest listing.
+    # One cell per (product, store): the cheapest listing. Variations of every listing.
     cells: dict[tuple[uuid.UUID, str], MatrixCellOutput] = {}
-    for r in rows:
-        if currency == "ars":
-            price = r.local_price
-        elif rate == "official":
-            price = r.price_usd_official
-        else:
-            price = r.price_usd_blue
+    variations: dict[uuid.UUID, list[Decimal]] = defaultdict(list)
+    for p in latest:
+        usd = p.usd_official if rate == "official" else p.usd_blue
+        price = p.local_price if currency == "ars" else usd
 
-        key = (r.canonical_product_id, r.slug)
+        old = old_prices.get(p.listing_id)
+        current_regular = p.regular_price or p.local_price
+        if old:
+            variations[p.product_id].append((current_regular / old - 1) * 100)
+
+        key = (p.product_id, p.store_slug)
         current = cells.get(key)
         if current is None or (
             price is not None and (current.price is None or price < current.price)
         ):
             cells[key] = MatrixCellOutput(
-                store_slug=r.slug,
+                store_slug=p.store_slug,
                 price=price,
-                regular_price=_regular_in_currency(price, r.local_price, r.regular_price),
-                is_promo=r.is_promo,
-                available=r.available,
-                captured_at=r.captured_at,
+                regular_price=_regular_in_currency(price, p.local_price, p.regular_price),
+                local_price=p.local_price,
+                usd_price=usd,
+                is_promo=p.is_promo,
+                available=p.available,
+                captured_at=p.captured_at,
+                content=content_label(p.grammage, p.unit),
+                shrinkflation=shrinks.get(p.listing_id),
             )
 
     by_product: dict[uuid.UUID, list[MatrixCellOutput]] = defaultdict(list)
@@ -174,29 +260,51 @@ async def get_matrix(
 
     details = {
         p.id: p
-        for p in await db.scalars(select(CanonicalProduct).where(CanonicalProduct.id.in_(page_ids)))
+        for p in await db.scalars(
+            select(CanonicalProduct).where(CanonicalProduct.id.in_(list(by_product)))
+        )
     }
 
-    items = []
-    for pid in page_ids:
-        product_cells = sorted(by_product[pid], key=lambda c: c.store_slug)
-        items.append(
+    rows = []
+    for product_id, product_cells in by_product.items():
+        product = details[product_id]
+        product_cells.sort(key=lambda c: c.store_slug)
+        changes = variations.get(product_id)
+        rows.append(
             MatrixRowOutput(
-                product_id=pid,
-                ean=details[pid].ean,
-                name=details[pid].name,
+                product_id=product_id,
+                ean=product.ean,
+                name=product.name,
+                category=product.category,
+                brand=product.brand,
+                content=product.content,
                 prices=product_cells,
                 spread=_spread(product_cells),
+                variation_30d=(sum(changes) / len(changes)).quantize(CENTS) if changes else None,
                 has_promotion=any(c.is_promo for c in product_cells),
+                shrinkflation=any(c.shrinkflation for c in product_cells),
             )
         )
 
-    return MatrixOutput(
-        items=items,
-        total=total,
-        page=page,
-        size=size,
-        currency=currency,
-        rate=effective_rate,
-        stores=empty.stores,
+    spreads = [r.spread.percentage for r in rows if r.spread]
+    output.summary = MatrixSummaryOutput(
+        products=len(rows),
+        average_spread=(sum(spreads) / len(spreads)).quantize(CENTS) if spreads else None,
+        with_promotion=sum(r.has_promotion for r in rows),
+        with_shrinkflation=sum(r.shrinkflation for r in rows),
     )
+
+    if q:
+        needle = _fold(q.strip())
+        rows = [r for r in rows if _matches(r, needle)]
+    if category:
+        rows = [r for r in rows if r.category == category]
+    if signal == "promo":
+        rows = [r for r in rows if r.has_promotion]
+    elif signal == "shrinkflation":
+        rows = [r for r in rows if r.shrinkflation]
+
+    rows.sort(key=_sort_key(sort))
+    output.total = len(rows)
+    output.items = rows[(page - 1) * size : page * size]
+    return output

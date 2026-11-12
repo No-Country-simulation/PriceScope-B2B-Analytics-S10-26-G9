@@ -1,6 +1,8 @@
 // Typed client for the PriceScope API. Requests go to /api/v1 on this origin
 // and next.config.ts rewrites them to the backend.
 
+import type { ProductCategory } from "@/lib/categories"
+
 export type Role = "client" | "admin"
 export type UserStatus = "pending" | "active" | "blocked" | "deactivated"
 export type OrganizationType = "retail" | "fund" | "media" | "other"
@@ -65,6 +67,119 @@ export type Store = {
   base_url: string
   category: StoreCategory
   active: boolean
+}
+
+// What a client sees of a store (GET /stores): no scraping details.
+export type ClientStore = Pick<Store, "id" | "name" | "slug" | "category">
+
+// GET /rates/latest. Decimals come as strings to keep their precision.
+export type RateQuote = {
+  source: string
+  buy: string | null
+  sell: string
+  quoted_at: string
+}
+
+export type LatestRates = {
+  official: RateQuote | null
+  blue: RateQuote | null
+  gap_pct: string | null
+}
+
+// GET /matrix. Money comes as decimal strings.
+export type MatrixCell = {
+  store_slug: string
+  price: string | null
+  regular_price: string | null
+  local_price: string
+  usd_price: string | null
+  is_promo: boolean
+  available: boolean
+  captured_at: string
+  content: string | null
+  shrinkflation: Shrinkflation | null
+}
+
+export type MatrixRow = {
+  product_id: string
+  ean: string
+  name: string
+  category: ProductCategory | null
+  brand: string | null
+  content: string | null
+  prices: MatrixCell[]
+  spread: {
+    cheapest_store_slug: string | null
+    most_expensive_store_slug: string | null
+    percentage: string
+  } | null
+  variation_30d: string | null
+  has_promotion: boolean
+  shrinkflation: boolean
+}
+
+export type MatrixOutput = Page<MatrixRow> & {
+  currency: "ars" | "usd"
+  rate: "official" | "blue" | null
+  stores: { slug: string; name: string }[]
+  summary: {
+    products: number
+    average_spread: string | null
+    with_promotion: number
+    with_shrinkflation: number
+  }
+}
+
+export type Shrinkflation = { before: string; after: string; changed_at: string }
+
+// GET /products and GET /products/{id}.
+export type ProductSummary = {
+  id: string
+  ean: string
+  name: string
+  brand: string | null
+  content: string | null
+  category: ProductCategory | null
+}
+
+export type ProductStore = {
+  store_slug: string
+  store_name: string
+  url: string
+  local_price: string
+  regular_price: string
+  is_promo: boolean
+  available: boolean
+  captured_at: string
+  usd_official: string | null
+  usd_blue: string | null
+  content: string | null
+  price_per_unit: string | null
+  unit: "g" | "ml" | "u" | null
+  shrinkflation: Shrinkflation | null
+}
+
+export type ProductDetail = ProductSummary & { stores: ProductStore[] }
+
+// GET /products/{id}/history: one point per store and day.
+export type ProductHistoryPoint = {
+  date: string
+  store_slug: string
+  price: string
+  regular_price: string
+  is_promo: boolean
+  content: string | null
+  usd_price: string | null
+  fx: string | null
+  quoted_at: string | null
+}
+
+export type ProductHistory = {
+  rate: "official" | "blue"
+  start: string
+  end: string
+  stores: { slug: string; name: string }[]
+  points: ProductHistoryPoint[]
 }
 
 export type DemoRequest = {
