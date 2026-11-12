@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -48,25 +49,37 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  ApiError,
+  fetchAllPages,
+  query,
+  type MatrixCell,
+  type MatrixOutput,
+  type MatrixRow,
+} from "@/lib/api"
+import { useAuth } from "@/lib/auth"
+import { CATEGORY_LABEL, PRODUCT_CATEGORIES } from "@/lib/categories"
 import { downloadCsv } from "@/lib/csv"
-import { formatArs, formatPct, formatUsd } from "@/lib/format"
+import { formatArs, formatPct, formatUsdAmount } from "@/lib/format"
 import { QUOTE_LABEL, type Quote } from "@/lib/quotes"
 import { useQuoteValues } from "@/lib/rates"
 import { cn } from "@/lib/utils"
 
-import { slugOf } from "@/components/producto/data"
-
-import { CATEGORIES, PRODUCTS, STORES, type Product } from "./data"
-
 const PAGE_SIZES = [10, 20, 50]
+const SEARCH_DELAY_MS = 300
 
 type Currency = "ARS" | "USD"
 type Signal = "all" | "promo" | "redu"
 type SortKey = "name" | "spread" | "var"
 
+// UI values → GET /matrix parameters.
+const API_SIGNAL: Record<Signal, string | null> = { all: null, promo: "promo", redu: "shrinkflation" }
+const API_SORT: Record<SortKey, string> = { name: "name", spread: "spread", var: "variation" }
+const API_RATE: Record<Quote, string> = { oficial: "official", blue: "blue" }
+
 const categoryItems = [
   { label: "Todas", value: "all" },
-  ...CATEGORIES.map((value) => ({ label: value, value })),
+  ...PRODUCT_CATEGORIES.map((category) => ({ label: category.label, value: category.value })),
 ]
 
 const signalItems = [
@@ -107,27 +120,53 @@ type Cell =
       redu?: string
     }
 
-type Row = {
-  product: Product
-  cells: Cell[]
-  spread: number | null
-}
-
-function spreadOf(product: Product) {
-  const values = product.p.filter((value): value is number => value != null)
-  if (values.length < 2) return null
-  const min = Math.min(...values)
-  return ((Math.max(...values) - min) / min) * 100
-}
-
 function formatSpread(spread: number | null) {
   return spread == null ? "—" : spread.toFixed(1).replace(".", ",") + " %"
 }
 
-// Matriz de precios (UX05): the same product across the client's stores.
-// Same layout as the admin users panel: header, KPIs, then one card with
-// filters, toolbar, table and pagination.
+function toCell(cell: MatrixCell | undefined, row: MatrixRow, currency: Currency): Cell {
+  if (!cell) return { kind: "missing" }
+  const ars = Number(cell.local_price)
+  const usd = cell.usd_price != null ? Number(cell.usd_price) : null
+  const money = (value: number) => (currency === "USD" ? formatUsdAmount(value) : formatArs(value))
+  const regular = cell.is_promo && cell.regular_price != null ? Number(cell.regular_price) : null
+  const spread = row.spread
+  return {
+    kind: "price",
+    main: currency === "USD" ? (usd != null ? formatUsdAmount(usd) : "Sin cotización") : formatArs(ars),
+    sub: currency === "USD" ? formatArs(ars) : usd != null ? formatUsdAmount(usd) : "",
+    rank: !spread
+      ? undefined
+      : spread.cheapest_store_slug === cell.store_slug
+        ? "cheap"
+        : spread.most_expensive_store_slug === cell.store_slug
+          ? "expensive"
+          : undefined,
+    promo: regular != null ? money(regular) : undefined,
+    promoTitle: regular != null ? `Precio regular ${money(regular)} · promo vigente` : undefined,
+    redu: cell.shrinkflation ? `${cell.shrinkflation.before} → ${cell.shrinkflation.after}` : undefined,
+  }
+}
+
+function subtitleOf(row: MatrixRow) {
+  return [row.category ? CATEGORY_LABEL[row.category] : "Sin categoría", row.content ?? row.brand]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+function useDebounced<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = React.useState(value)
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay)
+    return () => window.clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
+// Matriz de precios (UX05): the same product across the client's stores,
+// from GET /matrix. Search, filters, sort and pagination run in the API.
 export function PriceMatrix() {
+  const { request } = useAuth()
   const [search, setSearch] = React.useState("")
   const [category, setCategory] = React.useState("all")
   const [signal, setSignal] = React.useState<Signal>("all")
@@ -136,74 +175,69 @@ export function PriceMatrix() {
   const [sort, setSort] = React.useState<SortKey>("var")
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState(PAGE_SIZES[0])
+  const [data, setData] = React.useState<MatrixOutput | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  // Key of the request whose answer is on screen: loading while it differs.
+  const [loadedKey, setLoadedKey] = React.useState<string | null>(null)
+  const [reloadKey, setReloadKey] = React.useState(0)
+  const [exporting, setExporting] = React.useState(false)
 
-  // Real rates from GET /rates/latest; prices are still the UX05 sample.
   const { values: quoteValues } = useQuoteValues()
   const quoteItems = React.useMemo(() => quoteItemsFor(quoteValues), [quoteValues])
-  const rate = quoteValues[quote]
+  const debouncedSearch = useDebounced(search.trim(), SEARCH_DELAY_MS)
   const hasFilters = search !== "" || category !== "all" || signal !== "all"
 
-  const rows = React.useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    const money = (value: number) =>
-      currency === "USD" ? formatUsd(value, rate) : formatArs(value)
-    const other = (value: number) =>
-      currency === "USD" ? formatArs(value) : formatUsd(value, rate)
+  // The API asks for at least 2 characters.
+  const filters = React.useMemo(
+    () => ({
+      currency: currency.toLowerCase(),
+      rate: API_RATE[quote],
+      q: debouncedSearch.length >= 2 ? debouncedSearch : null,
+      category: category === "all" ? null : category,
+      signal: API_SIGNAL[signal],
+      sort: API_SORT[sort],
+    }),
+    [currency, quote, debouncedSearch, category, signal, sort]
+  )
 
-    const result: Row[] = PRODUCTS.filter((product) => {
-      if (
-        needle &&
-        !product.name.toLowerCase().includes(needle) &&
-        !product.cat.toLowerCase().includes(needle)
-      ) {
-        return false
-      }
-      if (category !== "all" && product.cat !== category) return false
-      if (signal === "promo" && !product.promo?.some(Boolean)) return false
-      if (signal === "redu" && !product.redu?.some(Boolean)) return false
-      return true
-    }).map((product) => {
-      const values = product.p.filter((v): v is number => v != null)
-      const min = Math.min(...values)
-      const max = Math.max(...values)
-      const ranked = values.length > 1 && min !== max
+  const path = `/matrix${query({ ...filters, page, size: pageSize })}`
+  const requestKey = `${path}#${reloadKey}`
+  const loading = loadedKey !== requestKey
 
-      const cells = product.p.map((price, store): Cell => {
-        if (price == null) return { kind: "missing" }
-        const promo = product.promo?.[store]
-        return {
-          kind: "price",
-          main: money(price),
-          sub: other(price),
-          rank: !ranked
-            ? undefined
-            : price === min
-              ? "cheap"
-              : price === max
-                ? "expensive"
-                : undefined,
-          promo: promo ? money(promo) : undefined,
-          promoTitle: promo
-            ? `Precio regular ${formatArs(promo)} · promo vigente`
-            : undefined,
-          redu: product.redu?.[store] ?? undefined,
-        }
+  React.useEffect(() => {
+    let cancelled = false
+    request<MatrixOutput>(path)
+      .then((result) => {
+        if (cancelled) return
+        setData(result)
+        setError(null)
+        setLoadedKey(requestKey)
+        // The page can fall out of range when the data changes.
+        const pages = Math.max(1, Math.ceil(result.total / pageSize))
+        if (page > pages) setPage(pages)
       })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof ApiError ? err.message : "No pudimos cargar la matriz.")
+        setLoadedKey(requestKey)
+      })
+    return () => { cancelled = true }
+  }, [request, path, requestKey, pageSize, page])
 
-      return { product, cells, spread: spreadOf(product) }
-    })
-
-    result.sort((a, b) => {
-      if (sort === "name") return a.product.name.localeCompare(b.product.name)
-      if (sort === "spread") return (b.spread ?? -1) - (a.spread ?? -1)
-      return b.product.v - a.product.v
-    })
-    return result
-  }, [search, category, signal, currency, rate, sort])
-
-  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const currentPage = Math.min(page, pages)
-  const visible = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const stores = React.useMemo(() => data?.stores ?? [], [data])
+  const rows = React.useMemo(
+    () =>
+      (data?.items ?? []).map((row) => {
+        const bySlug = new Map(row.prices.map((cell) => [cell.store_slug, cell]))
+        return {
+          row,
+          cells: stores.map((store) => toCell(bySlug.get(store.slug), row, currency)),
+          spread: row.spread ? Number(row.spread.percentage) : null,
+          variation: row.variation_30d != null ? Number(row.variation_30d) : null,
+        }
+      }),
+    [data, stores, currency]
+  )
 
   function clearFilters() {
     setSearch("")
@@ -212,31 +246,51 @@ export function PriceMatrix() {
     setPage(1)
   }
 
-  function exportCsv() {
-    downloadCsv(
-      `matriz-de-precios-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Producto", "Categoría", "Formato", ...STORES, "Spread", "Var. 30 d"],
-      rows.map((row) => [
-        row.product.name,
-        row.product.cat,
-        row.product.size,
-        ...row.product.p.map((price) =>
-          price == null ? "Sin dato" : Math.round(price)
-        ),
-        formatSpread(row.spread),
-        formatPct(row.product.v),
-      ])
-    )
+  // Every row that matches the filters, not just this page.
+  async function exportCsv() {
+    setExporting(true)
+    try {
+      const all = await fetchAllPages<MatrixRow>(request, "/matrix", filters)
+      downloadCsv(
+        `matriz-de-precios-${new Date().toISOString().slice(0, 10)}.csv`,
+        ["Producto", "EAN", "Categoría", "Formato", ...stores.map((store) => store.name), "Spread", "Var. 30 d"],
+        all.map((row) => {
+          const bySlug = new Map(row.prices.map((cell) => [cell.store_slug, cell]))
+          return [
+            row.name,
+            row.ean,
+            row.category ? CATEGORY_LABEL[row.category] : "",
+            row.content ?? "",
+            ...stores.map((store) => {
+              const price = bySlug.get(store.slug)?.price
+              return price == null ? "Sin dato" : price
+            }),
+            formatSpread(row.spread ? Number(row.spread.percentage) : null),
+            row.variation_30d == null ? "—" : formatPct(Number(row.variation_30d)),
+          ]
+        })
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No pudimos exportar la matriz.")
+    } finally {
+      setExporting(false)
+    }
   }
+
+  const total = data?.total ?? 0
 
   return (
     <>
       <PageHeader
         title="Matriz de precios"
-        description={`El mismo producto en tus ${STORES.length} tiendas asignadas.`}
+        description={
+          data
+            ? `El mismo producto en tus ${stores.length} ${stores.length === 1 ? "tienda asignada" : "tiendas asignadas"}.`
+            : "El mismo producto en tus tiendas asignadas."
+        }
       />
 
-      <MatrixKpis />
+      <MatrixKpis summary={data?.summary ?? null} storeCount={stores.length} />
 
       <Card className="gap-0 py-0 shadow-xs">
         <div className="grid gap-4 border-b p-(--card-spacing) sm:grid-cols-2 lg:grid-cols-4">
@@ -279,13 +333,13 @@ export function PriceMatrix() {
         <div className="flex flex-wrap items-center gap-2 border-b p-(--card-spacing)">
           <div className="relative w-full sm:w-72">
             <Label htmlFor="matrix-search" className="sr-only">
-              Buscar producto o categoría
+              Buscar producto, marca o EAN
             </Label>
             <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="matrix-search"
               type="search"
-              placeholder="Buscar producto o categoría"
+              placeholder="Buscar producto, marca o EAN"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -323,17 +377,21 @@ export function PriceMatrix() {
               variant="outline"
               size="lg"
               onClick={exportCsv}
-              disabled={rows.length === 0}
+              disabled={total === 0 || exporting}
             >
               <DownloadIcon data-icon="inline-start" />
-              Exportar
+              {exporting ? "Exportando…" : "Exportar"}
             </Button>
           </div>
         </div>
 
         <Legend />
 
-        <Table className="min-w-[960px]" aria-label="Matriz de precios por tienda">
+        <Table
+          className="min-w-[960px]"
+          aria-label="Matriz de precios por tienda"
+          aria-busy={loading}
+        >
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead
@@ -344,11 +402,11 @@ export function PriceMatrix() {
                   label="Producto"
                   active={sort === "name"}
                   direction="asc"
-                  onClick={() => setSort("name")}
+                  onClick={() => { setSort("name"); setPage(1) }}
                 />
               </TableHead>
-              {STORES.map((store) => (
-                <TableHead key={store}>{store}</TableHead>
+              {stores.map((store) => (
+                <TableHead key={store.slug}>{store.name}</TableHead>
               ))}
               <TableHead
                 aria-sort={sort === "spread" ? "descending" : "none"}
@@ -358,7 +416,7 @@ export function PriceMatrix() {
                   label="Spread"
                   active={sort === "spread"}
                   direction="desc"
-                  onClick={() => setSort("spread")}
+                  onClick={() => { setSort("spread"); setPage(1) }}
                 />
               </TableHead>
               <TableHead
@@ -369,15 +427,35 @@ export function PriceMatrix() {
                   label="Var. 30 d"
                   active={sort === "var"}
                   direction="desc"
-                  onClick={() => setSort("var")}
+                  onClick={() => { setSort("var"); setPage(1) }}
                 />
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visible.length === 0 ? (
+            {error ? (
               <TableRow>
-                <TableCell colSpan={STORES.length + 3} className="h-40 text-center">
+                <TableCell colSpan={stores.length + 3} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <TriangleAlertIcon className="size-6" />
+                    <p>{error}</p>
+                    <Button variant="outline" size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+                      Reintentar
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : !data ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <TableRow key={index}>
+                  <TableCell colSpan={4} className="py-3 pl-(--card-spacing)">
+                    <Skeleton className="h-10 w-full" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={stores.length + 3} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <PackageSearchIcon className="size-6" />
                     {hasFilters ? (
@@ -387,6 +465,8 @@ export function PriceMatrix() {
                           Limpiar filtros
                         </Button>
                       </>
+                    ) : stores.length === 0 ? (
+                      <p>Todavía no tenés tiendas asignadas.</p>
                     ) : (
                       <p>Todavía no hay productos en tus tiendas.</p>
                     )}
@@ -394,33 +474,40 @@ export function PriceMatrix() {
                 </TableCell>
               </TableRow>
             ) : (
-              visible.map((row) => (
-                <TableRow key={row.product.name} className="group/row">
+              rows.map(({ row, cells, spread, variation }) => (
+                <TableRow key={row.product_id} className={cn("group/row", loading && "opacity-60")}>
                   <TableCell className="sticky left-0 z-10 border-r bg-card py-3 pl-(--card-spacing) group-hover/row:bg-muted">
                     <Link
-                      href={`/user/producto?p=${slugOf(row.product.name)}`}
+                      href={`/user/producto?id=${row.product_id}`}
                       className="font-medium underline-offset-4 hover:underline"
                     >
-                      {row.product.name}
+                      {row.name}
                     </Link>
-                    <div className="text-muted-foreground">
-                      {row.product.cat} · {row.product.size}
-                    </div>
+                    <div className="text-muted-foreground">{subtitleOf(row)}</div>
                   </TableCell>
-                  {row.cells.map((cell, index) => (
-                    <PriceCell key={STORES[index]} cell={cell} />
+                  {cells.map((cell, index) => (
+                    <PriceCell key={stores[index].slug} cell={cell} />
                   ))}
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatSpread(row.spread)}
+                    {formatSpread(spread)}
                   </TableCell>
                   <TableCell className="pr-(--card-spacing) text-right">
-                    <ToneBadge
-                      tone={row.product.v > HIGH_VARIATION ? "red" : "neutral"}
-                      className="font-mono"
-                    >
-                      {row.product.v >= 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
-                      {formatPct(row.product.v)}
-                    </ToneBadge>
+                    {variation == null ? (
+                      <span
+                        className="text-muted-foreground"
+                        title="Todavía no hay un precio de hace 30 días para comparar"
+                      >
+                        —
+                      </span>
+                    ) : (
+                      <ToneBadge
+                        tone={variation > HIGH_VARIATION ? "red" : "neutral"}
+                        className="font-mono"
+                      >
+                        {variation >= 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                        {formatPct(variation)}
+                      </ToneBadge>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -430,10 +517,10 @@ export function PriceMatrix() {
 
         <div className="border-t p-(--card-spacing)">
           <TablePagination
-            page={currentPage}
+            page={page}
             size={pageSize}
-            total={rows.length}
-            noun={rows.length === 1 ? "producto" : "productos"}
+            total={total}
+            noun={total === 1 ? "producto" : "productos"}
             onPageChange={setPage}
           />
         </div>
@@ -606,46 +693,49 @@ function FilterSelect({
   )
 }
 
-// Counted from the sample catalogue; they move to the API with the data.
-function MatrixKpis() {
-  const spreads = PRODUCTS.map(spreadOf).filter(
-    (value): value is number => value != null
-  )
-  const avgSpread =
-    spreads.reduce((sum, value) => sum + value, 0) / Math.max(1, spreads.length)
-
+// KPIs from GET /matrix: every visible product, before search and filters.
+function MatrixKpis({
+  summary,
+  storeCount,
+}: {
+  summary: MatrixOutput["summary"] | null
+  storeCount: number
+}) {
+  const value = (text: string) => (summary ? text : null)
   const cards: {
     label: string
-    value: string
+    value: string | null
     hint: string
     tone: Tone
     icon: React.ReactNode
   }[] = [
     {
       label: "Productos comparados",
-      value: String(PRODUCTS.length),
-      hint: `Con precio en al menos una de tus ${STORES.length} tiendas`,
+      value: value(String(summary?.products ?? 0)),
+      hint: `Con precio en al menos una de tus ${storeCount} ${storeCount === 1 ? "tienda" : "tiendas"}`,
       tone: "brand",
       icon: <PackageSearchIcon />,
     },
     {
       label: "Spread promedio",
-      value: formatSpread(avgSpread),
+      value: value(
+        formatSpread(summary?.average_spread != null ? Number(summary.average_spread) : null)
+      ),
       hint: "Distancia entre la tienda más cara y la más barata",
       tone: "sky",
       icon: <PercentIcon />,
     },
     {
       label: "Con promo vigente",
-      value: String(PRODUCTS.filter((p) => p.promo?.some(Boolean)).length),
+      value: value(String(summary?.with_promotion ?? 0)),
       hint: "En al menos una tienda",
       tone: "violet",
       icon: <TagIcon />,
     },
     {
       label: "Con reduflación",
-      value: String(PRODUCTS.filter((p) => p.redu?.some(Boolean)).length),
-      hint: "Mismo precio o más, menos contenido",
+      value: value(String(summary?.with_shrinkflation ?? 0)),
+      hint: "Menos contenido neto en los últimos 90 días",
       tone: "amber",
       icon: <TriangleAlertIcon />,
     },
@@ -658,7 +748,7 @@ function MatrixKpis() {
           <CardHeader>
             <CardDescription>{card.label}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {card.value}
+              {card.value ?? <Skeleton className="h-8 w-20" />}
             </CardTitle>
             <CardAction>
               <IconTile tone={card.tone}>{card.icon}</IconTile>

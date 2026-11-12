@@ -1,6 +1,8 @@
 // Typed client for the PriceScope API. Requests go to /api/v1 on this origin
 // and next.config.ts rewrites them to the backend.
 
+import type { ProductCategory } from "@/lib/categories"
+
 export type Role = "client" | "admin"
 export type UserStatus = "pending" | "active" | "blocked" | "deactivated"
 export type OrganizationType = "retail" | "fund" | "media" | "other"
@@ -82,6 +84,50 @@ export type LatestRates = {
   official: RateQuote | null
   blue: RateQuote | null
   gap_pct: string | null
+}
+
+// GET /matrix. Money comes as decimal strings.
+export type MatrixCell = {
+  store_slug: string
+  price: string | null
+  regular_price: string | null
+  local_price: string
+  usd_price: string | null
+  is_promo: boolean
+  available: boolean
+  captured_at: string
+  content: string | null
+  shrinkflation: { before: string; after: string; changed_at: string } | null
+}
+
+export type MatrixRow = {
+  product_id: string
+  ean: string
+  name: string
+  category: ProductCategory | null
+  brand: string | null
+  content: string | null
+  prices: MatrixCell[]
+  spread: {
+    cheapest_store_slug: string | null
+    most_expensive_store_slug: string | null
+    percentage: string
+  } | null
+  variation_30d: string | null
+  has_promotion: boolean
+  shrinkflation: boolean
+}
+
+export type MatrixOutput = Page<MatrixRow> & {
+  currency: "ars" | "usd"
+  rate: "official" | "blue" | null
+  stores: { slug: string; name: string }[]
+  summary: {
+    products: number
+    average_spread: string | null
+    with_promotion: number
+    with_shrinkflation: number
+  }
 }
 
 export type DemoRequest = {

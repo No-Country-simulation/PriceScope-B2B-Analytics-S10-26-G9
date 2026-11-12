@@ -30,9 +30,9 @@ _KEYWORDS: dict[ProductCategory, tuple[str, ...]] = {
         "informatica",
         "audio",
     ),
+    # Not "textil": stores use it for home linen ("/Hogar y textil/").
     ProductCategory.INDUMENTARIA: (
         "indumentaria",
-        "textil",
         "ropa",
         "calzado",
         "zapatilla",
@@ -100,10 +100,10 @@ def classify_category(source_category: str | None) -> ProductCategory | None:
 
 @dataclass(frozen=True)
 class NetContent:
-    """Net content of a product, normalized to grams or milliliters."""
+    """Net content of a product, normalized to grams, milliliters or units."""
 
     amount: Decimal
-    unit: str  # "g" or "ml"
+    unit: str  # "g", "ml" or "u"
     label: str  # as shown to clients: "500 g", "1,5 L"
 
 
@@ -124,6 +124,10 @@ _UNITS = {
     "ml": ("ml", Decimal(1), "ml"),
     "cc": ("ml", Decimal(1), "ml"),
     "cm3": ("ml", Decimal(1), "ml"),
+    "un": ("u", Decimal(1), "u"),
+    "uni": ("u", Decimal(1), "u"),
+    "unid": ("u", Decimal(1), "u"),
+    "unidades": ("u", Decimal(1), "u"),
 }
 
 _CONTENT_RE = re.compile(
@@ -144,6 +148,15 @@ def _to_decimal(raw: str) -> Decimal | None:
 def _label(value: Decimal, unit: str) -> str:
     text = format(value.normalize(), "f").replace(".", ",")
     return f"{text} {unit}"
+
+
+def content_label(amount: Decimal | None, unit: str | None) -> str | None:
+    """Label of a normalized content: 450 g → "450 g", 1500 ml → "1,5 L"."""
+    if amount is None or unit not in ("g", "ml", "u"):
+        return None
+    if amount >= 1000 and unit != "u":
+        return _label(amount / 1000, "kg" if unit == "g" else "L")
+    return _label(amount, unit)
 
 
 def parse_net_content(name: str | None) -> NetContent | None:

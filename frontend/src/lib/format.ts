@@ -70,6 +70,11 @@ export function formatUsd(value: number, rate: number) {
   return "US$ " + groupThousands(whole) + "," + cents
 }
 
+// An amount that is already in USD (for example, converted at capture time).
+export function formatUsdAmount(value: number) {
+  return formatUsd(value, 1)
+}
+
 // Conteos (productos, errores): mismo agrupado que los precios, para que el
 // server y el browser coincidan.
 export function formatCount(value: number) {

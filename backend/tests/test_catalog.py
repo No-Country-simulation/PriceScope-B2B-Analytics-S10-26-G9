@@ -5,7 +5,12 @@ from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.models import CanonicalProduct, Listing, ProductCategory, Store, StoreCategory
-from app.services.catalog import classify_category, fill_missing_catalog, parse_net_content
+from app.services.catalog import (
+    classify_category,
+    content_label,
+    fill_missing_catalog,
+    parse_net_content,
+)
 
 
 @pytest.mark.parametrize(
@@ -19,6 +24,7 @@ from app.services.catalog import classify_category, fill_missing_catalog, parse_
         ("Electro > TV", ProductCategory.ELECTRO),
         ("/Tecnología/Celulares/", ProductCategory.ELECTRO),
         ("/Textil/Calzado/", ProductCategory.INDUMENTARIA),
+        ("/Hogar y textil/Organizacion/Lavado y Planchado/", None),
         ("/Mascotas/", None),
         ("", None),
         (None, None),
@@ -39,6 +45,8 @@ def test_classify_category(source: str | None, expected: ProductCategory | None)
         ("Yerba Mate Suave 1kg", "1000", "g", "1 kg"),
         ("Arroz 1.000 g", "1000", "g", "1000 g"),
         ("Shampoo 400 cc", "400", "ml", "400 ml"),
+        ("Detergente Finish tabletas dp 15 uni", "15", "u", "15 u"),
+        ("Pañales x 50 unidades", "50", "u", "50 u"),
     ],
 )
 def test_parse_net_content(name: str, amount: str, unit: str, label: str) -> None:
@@ -100,3 +108,16 @@ async def test_fill_missing_catalog_uses_listing_and_keeps_existing_values() -> 
     # A curated category is never replaced.
     assert rows["00000000000002"].category == ProductCategory.BEBIDAS
     assert rows["00000000000002"].content == "1 kg"
+
+
+@pytest.mark.parametrize(
+    ("amount", "unit", "label"),
+    [("450", "g", "450 g"), ("1500", "ml", "1,5 L"), ("1000", "g", "1 kg"), ("80", "u", "80 u")],
+)
+def test_content_label(amount: str, unit: str, label: str) -> None:
+    assert content_label(Decimal(amount), unit) == label
+
+
+def test_content_label_without_data() -> None:
+    assert content_label(None, "g") is None
+    assert content_label(Decimal(1), "un") is None

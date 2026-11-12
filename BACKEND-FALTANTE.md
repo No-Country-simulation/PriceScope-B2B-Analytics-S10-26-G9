@@ -13,7 +13,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | Mi cuenta | `/user/perfil` | API | `/account/*` | ✅ Conectada |
 | Admin · Solicitudes, Usuarios | `/admin/solicitudes`, `/admin/usuarios` | API | `/admin/demo-requests`, `/admin/users` | ✅ Conectada |
 | ~~**Cotización del dólar** (sidebar)~~ | todas las de `/user` | API | `GET /rates/latest`, `GET /rates/history` | ✅ Conectada (PR 2) |
-| **Matriz de precios** | `/user/matriz` | `matriz/data.ts` | `GET /matrix` **existe** | 🟡 Falta categoría, variación, reduflación y conectar |
+| ~~**Matriz de precios**~~ | `/user/matriz` | API | `GET /matrix` | ✅ Conectada (PR 3) |
 | **Ficha de producto** | `/user/producto?p=…` | `producto/data.ts` | — | ❌ Falta todo |
 | **Dashboard** | `/user/dashboard` | `dashboard/data.ts` | — | ❌ Falta todo |
 | **Alertas y reglas** | `/user/alertas`, `/user/regla-nueva`, campana | `alertas/data.ts`, `rule-data.ts` | Solo tablas | ❌ Ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
@@ -48,15 +48,16 @@ Varias pantallas listan las tiendas del usuario (columnas de la matriz, filtro d
 
 - ~~`GET /stores` → `[{ id, slug, name, category }]` con las tiendas visibles para el usuario.~~ **Hecho (PR 1)**, admin ve todas. Conectado en Mi cuenta → Tiendas asignadas (`client-profile.tsx`), que antes solo mostraba la cantidad.
 
-### 2.4 Reduflación
+### 2.4 Reduflación (🟡 hecha en la matriz)
 
-La matriz, la ficha y las alertas marcan cuando una tienda achica el contenido neto (`"500 → 450 g"`). `MatrixRowOutput.shrinkflation` hoy es siempre `false`.
+La matriz, la ficha y las alertas marcan cuando una tienda achica el contenido neto (`"500 → 450 g"`). ~~`MatrixRowOutput.shrinkflation` hoy es siempre `false`.~~
 
-- Depende de 2.2: con `prices.grammage` poblado, se detecta comparando el último gramaje de cada `listing` con el anterior distinto.
-- Servicio `services/shrinkflation.py` → `latest_change(listing_id) -> { before, after, changed_at } | None`.
-- Se expone en la matriz (por celda) y en la ficha (marca en el gráfico).
+- ~~Depende de 2.2: con `prices.grammage` poblado, se detecta comparando el último gramaje de cada `listing` con el anterior distinto.~~ **Hecho (PR 3)** en `services/matrix._shrinkflation`: últimos 90 días, misma unidad, contenido actual menor que uno anterior. Cuenta también unidades (`15 → 12 u`).
+- ~~Se expone en la matriz (por celda)~~ ✅. Falta en la ficha (marca en el gráfico, PR 4): mover `_shrinkflation` a un servicio propio cuando la use la ficha.
 
 ### 2.5 Índice de precios por categoría (base del dashboard)
+
+> **Decisión (PR 3):** la matriz calcula la variación de 30 días con consultas directas (último precio regular antes del corte), sin continuous aggregate: los tests arman el esquema con `create_all` y no podrían probarlo. El continuous aggregate queda para el dashboard (PR 5), si hace falta por rendimiento.
 
 El dashboard necesita una serie diaria por categoría y tienda. Calcularla en cada request sobre la hypertable `prices` puede ser caro; proponemos un **continuous aggregate** de TimescaleDB:
 
@@ -97,7 +98,7 @@ El dashboard y la ficha grafican el dólar día a día. `exchange_rates` ya es h
 
 Queda: `SNAPSHOT_QUOTES` (dashboard) y `QUOTES` en la ficha siguen anclando los datos de muestra; se borran en los PR 4 y 5, cuando esas pantallas tengan precios reales.
 
-### 3.2 Matriz de precios (`/user/matriz`)
+### ~~3.2 Matriz de precios (`/user/matriz`)~~ ✅
 
 **Front:** `components/matriz/price-matrix.tsx` + `matriz/data.ts`.
 
@@ -107,14 +108,22 @@ Queda: `SNAPSHOT_QUOTES` (dashboard) y `QUOTES` en la ficha siguen anclando los 
 
 | Dato del front | Qué agregar |
 | --- | --- |
-| `cat` y filtro por categoría | `category` en cada fila y parámetro `category=` (depende de 2.1) |
-| `size` (formato) | `content` en cada fila (depende de 2.2) |
-| `v`: variación de 30 días y orden por variación | `variation_30d` por fila (precio regular promedio hoy vs. hace 30 días, desde `daily_prices`) y `sort=variation\|spread\|name` |
-| `redu` por tienda y filtro "Con reduflación" | `shrinkflation: { before, after } \| null` por celda y `signal=promo\|shrinkflation` (depende de 2.4) |
-| Columnas = tiendas del usuario | ✅ ya viene en `stores` |
-| `slug` para el link a la ficha | Usar `product_id` en la URL: `/user/producto?id=<uuid>` |
+| ~~`cat` y filtro por categoría~~ ✅ | `category` en cada fila y parámetro `category=` |
+| ~~`size` (formato)~~ ✅ | `content` (canónico) y `content` por celda (lo que publica cada tienda) |
+| ~~`v`: variación de 30 días y orden por variación~~ ✅ | `variation_30d` (promedio por tienda del precio regular, sin promos, vs. el último de hace 30 días; `null` sin historial) y `sort=variation\|spread\|name` |
+| ~~`redu` por tienda y filtro "Con reduflación"~~ ✅ | `shrinkflation: { before, after, changed_at } \| null` por celda y `signal=promo\|shrinkflation` |
+| ~~Columnas = tiendas del usuario~~ ✅ | `stores` |
+| ~~Precio en la otra moneda~~ ✅ | `local_price` y `usd_price` por celda (USD con la cotización del momento de la captura) |
+| ~~KPIs de la pantalla~~ ✅ | `summary: { products, average_spread, with_promotion, with_shrinkflation }` sobre todo lo visible, antes de filtros |
+| ~~`slug` para el link a la ficha~~ ✅ | `/user/producto?id=<uuid>` |
 
-**Front a cambiar:** reemplazar `PRODUCTS`/`STORES` por la respuesta paginada; la búsqueda, filtros y orden pasan al servidor; el CSV puede seguir armándose en el cliente con la página actual o pedir `size=100`.
+~~**Front a cambiar:** reemplazar `PRODUCTS`/`STORES` por la respuesta paginada; la búsqueda, filtros y orden pasan al servidor.~~ ✅ Búsqueda (nombre, marca o EAN, sin acentos) con espera de 300 ms; el CSV baja todas las filas filtradas (`fetchAllPages`).
+
+**Pendiente:**
+
+- La ficha todavía lee `?p=<slug>` de los datos de muestra: hasta el PR 4, el link desde la matriz abre la ficha de ejemplo.
+- `matriz/data.ts` no se puede borrar todavía: lo siguen importando `producto/data.ts` y `alertas/rule-data.ts`.
+- La matriz calcula todo lo visible en cada request y después pagina (para poder ordenar por spread y variación). Alcanza para unos miles de productos; si el catálogo crece, cachear o precalcular.
 
 ### 3.3 Ficha de producto (`/user/producto`)
 
@@ -219,7 +228,7 @@ Cada PR deja algo usable y con tests.
 
 1. ~~**Base de catálogo:** enum `ProductCategory` + `canonical_products.category/brand/content/grammage/unit`, categoría y contenido neto automáticos al registrar precios, script de relleno y `GET /stores`. (§2.1–2.3)~~ ✅ Hecho en `feat/backend-datos-reales`.
 2. ~~**Cotizaciones para el cliente:** `GET /rates/latest` y `/rates/history`; conectar `quotes-card.tsx` y `lib/quotes.ts`. (§3.1)~~ ✅ Hecho.
-3. **Matriz completa:** categoría, contenido, `variation_30d`, filtros y orden en `/matrix`; continuous aggregate `daily_prices`; conectar `/user/matriz`. (§2.5, §3.2)
+3. ~~**Matriz completa:** categoría, contenido, `variation_30d`, filtros y orden en `/matrix`; conectar `/user/matriz`. (§3.2)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 4. **Ficha de producto:** `/products`, `/products/{id}`, `/products/{id}/history`; reduflación (§2.4); conectar `/user/producto`. (§3.3)
 5. **Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)
 6. **Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)
@@ -228,7 +237,12 @@ Cada PR deja algo usable y con tests.
 
 Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
-## 5. Del lado del front, al conectar
+## 5. Problemas encontrados al probar con datos reales
+
+- **Búsqueda con espacios en VTEX:** `POST /admin/scraping/run` con `term` de dos palabras (`"cafe molido"`) devuelve 502 en Carrefour y Jumbo; con una palabra funciona. Viene de `scrapers/vtex_client.py` (parámetro `ft`), no de estos PR. Revisar.
+- **Hogar y textil:** las tiendas usan "textil" para blanquería; se sacó de las palabras clave de Indumentaria.
+
+## 6. Del lado del front, al conectar
 
 - Cada `data.ts` de muestra se borra cuando su pantalla queda conectada (`matriz`, `producto`, `dashboard`, `alertas`, `curaduria`, `operacion`) junto con `SNAPSHOT_QUOTES` y `QUOTES`.
 - Las llamadas van por `lib/api.ts` (ya maneja token y refresh).

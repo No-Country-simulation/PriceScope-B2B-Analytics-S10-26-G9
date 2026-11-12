@@ -5,7 +5,15 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.database import SessionLocal
-from app.models import CanonicalProduct, Listing, Price, Store, StoreCategory, UserStore
+from app.models import (
+    CanonicalProduct,
+    Listing,
+    Price,
+    ProductCategory,
+    Store,
+    StoreCategory,
+    UserStore,
+)
 from tests.conftest import bearer, create_active_user, login
 
 URL = "/api/v1/matrix"
@@ -303,3 +311,163 @@ async def test_product_without_promotion(
 
     assert item["has_promotion"] is False
     assert all(c["is_promo"] is False and c["regular_price"] == c["price"] for c in item["prices"])
+
+
+async def add_price(
+    db,
+    listing: Listing,
+    captured_at: datetime,
+    ars: str,
+    regular: str | None = None,
+    promo: bool = False,
+    grammage: str | None = None,
+    unit: str | None = None,
+) -> None:
+    db.add(
+        Price(
+            listing_id=listing.id,
+            captured_at=captured_at,
+            local_price=Decimal(ars),
+            regular_price=Decimal(regular or ars),
+            is_promo=promo,
+            price_usd_official=Decimal(ars) / 1000,
+            price_usd_blue=Decimal(ars) / 1100,
+            grammage=Decimal(grammage) if grammage else None,
+            unit=unit,
+        )
+    )
+
+
+async def add_bare_listing(db, store: Store, product: CanonicalProduct, code: str) -> Listing:
+    listing = Listing(
+        store_id=store.id,
+        external_code=code,
+        name=product.name,
+        url=f"https://{store.slug}.example.com/{code}",
+        canonical_product_id=product.id,
+    )
+    db.add(listing)
+    await db.flush()
+    return listing
+
+
+@pytest.fixture
+async def history() -> dict[str, CanonicalProduct]:
+    """Coffee: +10 % in one store, +20 % in the other, and shrinkflation in Jumbo.
+    Detergent: on promo today (its regular price did not move). Rice: no old price."""
+    now = datetime.now(UTC)
+    old = now - timedelta(days=40)
+    async with SessionLocal() as db:
+        carrefour = await add_store(db, "carrefour")
+        jumbo = await add_store(db, "jumbo")
+        coffee = CanonicalProduct(
+            ean="07790000000401",
+            name="Café molido 500 g",
+            category=ProductCategory.ALMACEN,
+            brand="Aroma Andino",
+            content="500 g",
+        )
+        detergent = CanonicalProduct(
+            ean="07790000002231", name="Detergente 750 ml", category=ProductCategory.LIMPIEZA
+        )
+        rice = CanonicalProduct(ean="07790000000999", name="Arroz 1 kg")
+        db.add_all([coffee, detergent, rice])
+        await db.flush()
+
+        coffee_c = await add_bare_listing(db, carrefour, coffee, "c1")
+        await add_price(db, coffee_c, old, "1000.00", grammage="500", unit="g")
+        await add_price(db, coffee_c, now, "1100.00", grammage="500", unit="g")
+
+        coffee_j = await add_bare_listing(db, jumbo, coffee, "j1")
+        await add_price(db, coffee_j, old, "1000.00", grammage="500", unit="g")
+        await add_price(db, coffee_j, now - timedelta(days=5), "1150.00", grammage="450", unit="g")
+        await add_price(db, coffee_j, now, "1200.00", grammage="450", unit="g")
+
+        detergent_c = await add_bare_listing(db, carrefour, detergent, "c2")
+        await add_price(db, detergent_c, old, "2000.00")
+        await add_price(db, detergent_c, now, "1500.00", regular="2000.00", promo=True)
+
+        rice_j = await add_bare_listing(db, jumbo, rice, "j3")
+        await add_price(db, rice_j, now, "900.00")
+        await db.commit()
+        return {"coffee": coffee, "detergent": detergent, "rice": rice}
+
+
+async def test_row_has_catalog_fields_and_both_currencies(
+    client: AsyncClient, admin_token: str, history: dict
+) -> None:
+    body = (await client.get(URL, params={"rate": "blue"}, headers=bearer(admin_token))).json()
+    coffee = row(body, "07790000000401")
+
+    assert coffee["category"] == "almacen"
+    assert coffee["brand"] == "Aroma Andino"
+    assert coffee["content"] == "500 g"
+    cell = coffee["prices"][0]
+    assert cell["store_slug"] == "carrefour"
+    assert Decimal(cell["local_price"]) == Decimal("1100")
+    assert Decimal(cell["usd_price"]) == Decimal("1.00")
+    assert cell["content"] == "500 g"
+
+
+async def test_variation_uses_regular_price_from_30_days_ago(
+    client: AsyncClient, admin_token: str, history: dict
+) -> None:
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+
+    assert row(body, "07790000000401")["variation_30d"] == "15.00"  # (10 % + 20 %) / 2
+    assert row(body, "07790000002231")["variation_30d"] == "0.00"  # promo does not count
+    assert row(body, "07790000000999")["variation_30d"] is None
+
+
+async def test_shrinkflation_is_flagged_per_store(
+    client: AsyncClient, admin_token: str, history: dict
+) -> None:
+    body = (await client.get(URL, headers=bearer(admin_token))).json()
+    coffee = row(body, "07790000000401")
+    cells = {c["store_slug"]: c for c in coffee["prices"]}
+
+    assert coffee["shrinkflation"] is True
+    assert cells["carrefour"]["shrinkflation"] is None
+    assert cells["jumbo"]["shrinkflation"]["before"] == "500 g"
+    assert cells["jumbo"]["shrinkflation"]["after"] == "450 g"
+    assert cells["jumbo"]["content"] == "450 g"
+
+
+async def test_summary_counts_every_visible_product(
+    client: AsyncClient, admin_token: str, history: dict
+) -> None:
+    body = (await client.get(URL, params={"q": "arroz"}, headers=bearer(admin_token))).json()
+
+    assert body["total"] == 1
+    assert body["summary"] == {
+        "products": 3,
+        "average_spread": "9.09",  # only coffee has two stores: 1100 vs 1200
+        "with_promotion": 1,
+        "with_shrinkflation": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"category": "limpieza"}, ["07790000002231"]),
+        ({"signal": "promo"}, ["07790000002231"]),
+        ({"signal": "shrinkflation"}, ["07790000000401"]),
+        ({"q": "aroma"}, ["07790000000401"]),  # brand
+        ({"q": "CAFE"}, ["07790000000401"]),  # no accents, any case
+        ({"sort": "variation"}, ["07790000000401", "07790000002231", "07790000000999"]),
+        ({"sort": "spread"}, ["07790000000401", "07790000000999", "07790000002231"]),
+        ({"sort": "name"}, ["07790000000999", "07790000000401", "07790000002231"]),
+    ],
+)
+async def test_filters_and_sort(
+    client: AsyncClient, admin_token: str, history: dict, params: dict, expected: list[str]
+) -> None:
+    body = (await client.get(URL, params=params, headers=bearer(admin_token))).json()
+    assert [i["ean"] for i in body["items"]] == expected
+
+
+async def test_invalid_filters(client: AsyncClient, admin_token: str) -> None:
+    for params in ({"category": "juguetes"}, {"signal": "x"}, {"sort": "price"}):
+        response = await client.get(URL, params=params, headers=bearer(admin_token))
+        assert response.status_code == 422, params
