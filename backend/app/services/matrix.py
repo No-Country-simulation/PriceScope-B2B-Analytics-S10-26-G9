@@ -28,16 +28,15 @@ from app.schemas.matrix import (
     MatrixStoreOutput,
     MatrixSummaryOutput,
     Rate,
-    ShrinkflationOutput,
     Signal,
     Sort,
 )
 from app.services.catalog import content_label
+from app.services.shrinkflation import SHRINKFLATION_DAYS, shrinkflation_by_listing
 from app.services.stores import visible_store_ids
 
 CENTS = Decimal("0.01")
 VARIATION_DAYS = 30
-SHRINKFLATION_DAYS = 90
 
 
 def _fold(text: str) -> str:
@@ -157,52 +156,6 @@ async def _regular_prices_at(
     return {listing_id: price for listing_id, price in rows}
 
 
-async def _shrinkflation(
-    db: AsyncSession, listing_ids: list[uuid.UUID], since: datetime
-) -> dict[uuid.UUID, ShrinkflationOutput]:
-    """Listings whose current net content is smaller than a previous one since `since`."""
-    if not listing_ids:
-        return {}
-    rows = await db.execute(
-        select(
-            Price.listing_id,
-            Price.grammage,
-            Price.unit,
-            func.min(Price.captured_at),
-            func.max(Price.captured_at),
-        )
-        .where(
-            Price.listing_id.in_(listing_ids),
-            Price.location_id.is_(None),
-            Price.captured_at >= since,
-            Price.grammage.is_not(None),
-        )
-        .group_by(Price.listing_id, Price.grammage, Price.unit)
-    )
-    by_listing: dict[uuid.UUID, list[tuple[Decimal, str | None, datetime, datetime]]] = defaultdict(
-        list
-    )
-    for listing_id, grammage, unit, first, last in rows:
-        by_listing[listing_id].append((grammage, unit, first, last))
-
-    result = {}
-    for listing_id, groups in by_listing.items():
-        current = max(groups, key=lambda g: g[3])
-        previous = [
-            g for g in groups if g[1] == current[1] and g[0] > current[0] and g[3] < current[2]
-        ]
-        if not previous:
-            continue
-        before = max(previous, key=lambda g: g[3])
-        before_label = content_label(before[0], before[1])
-        after_label = content_label(current[0], current[1])
-        if before_label and after_label:
-            result[listing_id] = ShrinkflationOutput(
-                before=before_label, after=after_label, changed_at=current[2]
-            )
-    return result
-
-
 def _matches(row: MatrixRowOutput, needle: str) -> bool:
     haystack = " ".join(filter(None, [row.name, row.brand, row.ean]))
     return needle in _fold(haystack)
@@ -267,7 +220,9 @@ async def get_matrix(
 
     listing_ids = [p.listing_id for p in latest]
     old_prices = await _regular_prices_at(db, listing_ids, now - timedelta(days=VARIATION_DAYS))
-    shrinks = await _shrinkflation(db, listing_ids, now - timedelta(days=SHRINKFLATION_DAYS))
+    shrinks = await shrinkflation_by_listing(
+        db, listing_ids, now - timedelta(days=SHRINKFLATION_DAYS)
+    )
 
     # One cell per (product, store): the cheapest listing. Variations of every listing.
     cells: dict[tuple[uuid.UUID, str], MatrixCellOutput] = {}

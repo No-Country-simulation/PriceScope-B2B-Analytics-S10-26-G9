@@ -1,8 +1,8 @@
-// UX07 · Nueva regla: opciones y estimación de muestra. Sale del catálogo de
-// la matriz (components/matriz/data.ts); cuando entre la API, la vista previa
-// la calcula el backend con los precios reales del día.
+// UX07 · Nueva regla: opciones y estimación de muestra (sample-products.ts).
+// Cuando entre la API, la vista previa la calcula el backend con los precios
+// reales del día.
 
-import { CATEGORIES, PRODUCTS, STORES } from "@/components/matriz/data"
+import { CATEGORIES, PRODUCTS, STORES } from "./sample-products"
 import type { Quote } from "@/lib/quotes"
 
 export const ANY_STORE = "cualquier tienda"
@@ -74,4 +74,10 @@ export function matchesFor(
         : []
     })
   }).sort((a, b) => b.variation - a.variation)
+}
+
+/** Los productos de muestra no existen en la API: el link lleva a la matriz. */
+export function productHref(label: string) {
+  void label
+  return "/user/matriz"
 }

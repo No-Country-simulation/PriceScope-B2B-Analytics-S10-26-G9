@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel
@@ -23,3 +24,11 @@ def validate_password(value: str) -> str:
 
 
 Password = Annotated[str, AfterValidator(validate_password)]
+
+
+class ShrinkflationOutput(BaseModel):
+    """The listing now has less net content than before, in the last 90 days."""
+
+    before: str
+    after: str
+    changed_at: datetime

@@ -10,6 +10,7 @@ from app.api.v1 import (
     auth,
     demo,
     matrix,
+    products,
     rates,
     stores,
 )
@@ -27,3 +28,4 @@ api_router.include_router(admin_scraping.router)
 api_router.include_router(matrix.router)
 api_router.include_router(stores.router)
 api_router.include_router(rates.router)
+api_router.include_router(products.router)

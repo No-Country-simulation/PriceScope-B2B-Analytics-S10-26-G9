@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.models import ProductCategory
-from app.schemas.common import Page
+from app.schemas.common import Page, ShrinkflationOutput
 
 Currency = Literal["ars", "usd"]
 Rate = Literal["official", "blue"]
@@ -17,14 +17,6 @@ Sort = Literal["name", "spread", "variation"]
 class MatrixStoreOutput(BaseModel):
     slug: str
     name: str
-
-
-class ShrinkflationOutput(BaseModel):
-    """The listing now has less net content than before, in the last 90 days."""
-
-    before: str
-    after: str
-    changed_at: datetime
 
 
 class MatrixCellOutput(BaseModel):
