@@ -7,6 +7,8 @@ a cadenas minoristas, fondos de inversión y medios en mercados de alta volatili
 Reemplaza el relevamiento manual (15 portales, 2 veces por semana, +10.000 productos) con scrapers
 programados, ingesta de cotizaciones y un dashboard ejecutivo de actualización diaria.
 
+> 📄 **Documentación oficial del proyecto:** Puedes consultar la guía y consigna completa brindada por No-Country [en este enlace](https://github.com/No-Country-simulation/PriceScope-B2B-Analytics-S10-26-G9/blob/main/data/priecescope-nocountry.pdf).
+> 
 <details>
 <summary>Problema</summary>
 
