@@ -10,6 +10,7 @@ from app.api.v1 import (
     auth,
     demo,
     matrix,
+    stores,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -23,3 +24,4 @@ api_router.include_router(admin_stores.router)
 api_router.include_router(admin_rates.router)
 api_router.include_router(admin_scraping.router)
 api_router.include_router(matrix.router)
+api_router.include_router(stores.router)

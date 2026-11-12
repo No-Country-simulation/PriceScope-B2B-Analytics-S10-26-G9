@@ -11,6 +11,7 @@ def sample_product() -> dict:
     """A fictional VTEX product for automated tests."""
     return {
         "productName": "Leche Entera 1 Litro",
+        "brand": " La Pradera ",
         "link": "/leche-entera/p",
         "categories": ["/Almacen/Lacteos/"],
         "items": [
@@ -67,6 +68,7 @@ def test_extracts_product_data() -> None:
     assert result.available is True
     assert result.category == "/Almacen/Lacteos/"
     assert result.url == f"{BASE_URL}/leche-entera/p"
+    assert result.brand == "La Pradera"
 
 
 def test_ignores_external_sellers() -> None:
@@ -139,3 +141,13 @@ def test_extracts_multiple_skus() -> None:
         "SKU-101",
         "SKU-102",
     }
+
+
+def test_missing_or_invalid_brand_is_none() -> None:
+    product = sample_product()
+    product["brand"] = 123
+
+    assert parse(product)[0].brand is None
+
+    del product["brand"]
+    assert parse(product)[0].brand is None

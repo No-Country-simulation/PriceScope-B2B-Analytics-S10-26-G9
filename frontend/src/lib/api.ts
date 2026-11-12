@@ -67,6 +67,9 @@ export type Store = {
   active: boolean
 }
 
+// What a client sees of a store (GET /stores): no scraping details.
+export type ClientStore = Pick<Store, "id" | "name" | "slug" | "category">
+
 export type DemoRequest = {
   id: string
   company: string

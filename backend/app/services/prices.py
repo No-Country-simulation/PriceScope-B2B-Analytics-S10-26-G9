@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CanonicalProduct, Listing, Price, RateType, StoreLocation
 from app.services import rates
+from app.services.catalog import classify_category, parse_net_content
 
 CENTS = Decimal("0.01")
 MAX_STRIKETHROUGH_RATIO = Decimal("3")
@@ -30,6 +31,7 @@ class ScrapedObservation:
     unit: str | None = None
     location_id: uuid.UUID | None = None
     ean: str | None = None
+    brand: str | None = None
 
 
 async def record_observation(
@@ -66,16 +68,36 @@ async def record_observation(
     is_promo = strikethrough is not None and strikethrough > observation.current_price
     regular_price = strikethrough if is_promo else observation.current_price
 
+    # Net content read from the name when the scraper does not provide it.
+    content = parse_net_content(observation.name)
+    grammage = observation.grammage
+    unit = observation.unit
+    if grammage is None and content is not None:
+        grammage, unit = content.amount, content.unit
+
     canonical_id = None
     if observation.ean is not None:
+        statement = insert(CanonicalProduct).values(
+            ean=observation.ean,
+            name=observation.name,
+            category=classify_category(observation.category),
+            brand=observation.brand,
+            content=content.label if content else None,
+            grammage=content.amount if content else None,
+            unit=content.unit if content else None,
+        )
+        table = CanonicalProduct.__table__.c
+        # Keeps the first-seen name; only fills the attributes that are still missing,
+        # so a curated value is never overwritten by a scraper.
+        fill = {
+            column: func.coalesce(table[column], statement.excluded[column])
+            for column in ("category", "brand", "content", "grammage", "unit")
+        }
         canonical_id = await db.scalar(
-            insert(CanonicalProduct)
-            .values(ean=observation.ean, name=observation.name)
-            .on_conflict_do_update(
+            statement.on_conflict_do_update(
                 index_elements=["ean"],
-                set_={"updated_at": func.now()},  # keeps the first-seen name
-            )
-            .returning(CanonicalProduct.id)
+                set_={"updated_at": func.now(), **fill},
+            ).returning(CanonicalProduct.id)
         )
 
     listing_values = {
@@ -122,8 +144,8 @@ async def record_observation(
         regular_price=regular_price,
         is_promo=is_promo,
         available=observation.available,
-        grammage=observation.grammage,
-        unit=observation.unit,
+        grammage=grammage,
+        unit=unit,
         fx_official=fx_official,
         fx_blue=fx_blue,
         quoted_at=max((r.quoted_at for r in latest), default=None),

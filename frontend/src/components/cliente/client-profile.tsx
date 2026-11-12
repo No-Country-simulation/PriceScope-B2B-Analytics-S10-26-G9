@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/admin/page-header"
 import { IconTile } from "@/components/admin/tone"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { STORE_CATEGORY_LABELS } from "@/components/admin/user-labels"
+import { type ClientStore } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
@@ -56,12 +58,7 @@ export function ClientProfile() {
               <CardDescription>Para cambiar tus tiendas, contactá al equipo de PriceScope.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-3 rounded-lg border p-4">
-                <IconTile tone="brand"><StoreIcon /></IconTile>
-                <p className="min-w-0 font-medium tabular-nums">
-                  {user.store_ids.length === 0 ? "Todavía no tenés tiendas asignadas" : `${user.store_ids.length} ${user.store_ids.length === 1 ? "tienda asignada" : "tiendas asignadas"}`}
-                </p>
-              </div>
+              <AssignedStores />
             </CardContent>
           </Card>
         </section>
@@ -88,4 +85,43 @@ export function ClientProfile() {
       </div>
     </div>}
   </>
+}
+
+// Names come from GET /stores; /auth/me only has the ids.
+function AssignedStores() {
+  const { request } = useAuth()
+  const [stores, setStores] = React.useState<ClientStore[] | null>(null)
+  const [failed, setFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    request<ClientStore[]>("/stores")
+      .then((data) => { if (!cancelled) setStores(data) })
+      .catch(() => { if (!cancelled) setFailed(true) })
+    return () => { cancelled = true }
+  }, [request])
+
+  if (failed) {
+    return <p className="rounded-lg border p-4 text-sm text-muted-foreground">No pudimos cargar tus tiendas. Probá de nuevo más tarde.</p>
+  }
+  if (!stores) {
+    return <div role="status" aria-label="Cargando tus tiendas" className="flex flex-col gap-2">
+      <Skeleton className="h-16 rounded-lg" />
+    </div>
+  }
+  if (stores.length === 0) {
+    return <div className="flex items-center gap-3 rounded-lg border p-4">
+      <IconTile tone="brand"><StoreIcon /></IconTile>
+      <p className="min-w-0 font-medium">Todavía no tenés tiendas asignadas</p>
+    </div>
+  }
+  return <ul className="flex flex-col gap-2" aria-label="Tus tiendas">
+    {stores.map((store) => <li key={store.id} className="flex items-center gap-3 rounded-lg border p-4">
+      <IconTile tone="brand"><StoreIcon /></IconTile>
+      <div className="min-w-0">
+        <p className="truncate font-medium">{store.name}</p>
+        <p className="text-sm text-muted-foreground">{STORE_CATEGORY_LABELS[store.category]}</p>
+      </div>
+    </li>)}
+  </ul>
 }
