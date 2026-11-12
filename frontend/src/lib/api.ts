@@ -182,6 +182,52 @@ export type ProductHistory = {
   points: ProductHistoryPoint[]
 }
 
+// GET /dashboard: price index by category vs. the dollar. Percentages in %.
+export type DashboardRow = {
+  category: ProductCategory
+  products: number
+  ars: number
+  usd: number | null
+  gap: number | null
+}
+
+export type DashboardSummary = {
+  days: number
+  products: number
+  ars: number
+  usd: number | null
+  devaluation: number | null
+  gap: number | null
+  rate_from: number | null
+  rate_to: number | null
+  rows: DashboardRow[]
+}
+
+export type DashboardPoint = {
+  date: string
+  ars: number
+  usd: number | null
+  rate: number | null
+  categories: Partial<Record<ProductCategory, number>>
+}
+
+export type DashboardData = {
+  rate: "official" | "blue"
+  start: string | null
+  end: string | null
+  summary: DashboardSummary | null
+  series: DashboardPoint[]
+  scatter: { category: ProductCategory; month: string; price: number; fx: number }[]
+  peaks: { category: ProductCategory; date: string; value: number }[]
+}
+
+export type DashboardOptions = {
+  stores: { slug: string; name: string }[]
+  categories: ProductCategory[]
+  min_date: string | null
+  max_date: string | null
+}
+
 export type DemoRequest = {
   id: string
   company: string

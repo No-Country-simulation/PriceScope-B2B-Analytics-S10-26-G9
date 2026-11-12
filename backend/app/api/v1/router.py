@@ -8,6 +8,7 @@ from app.api.v1 import (
     admin_stores,
     admin_users,
     auth,
+    dashboard,
     demo,
     matrix,
     products,
@@ -29,3 +30,4 @@ api_router.include_router(matrix.router)
 api_router.include_router(stores.router)
 api_router.include_router(rates.router)
 api_router.include_router(products.router)
+api_router.include_router(dashboard.router)
