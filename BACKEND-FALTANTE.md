@@ -15,7 +15,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | ~~**Cotización del dólar** (sidebar)~~ | todas las de `/user` | API | `GET /rates/latest`, `GET /rates/history` | ✅ Conectada (PR 2) |
 | ~~**Matriz de precios**~~ | `/user/matriz` | API | `GET /matrix` | ✅ Conectada (PR 3) |
 | ~~**Ficha de producto**~~ | `/user/producto?id=…` | API | `GET /products/{id}`, `/history`, `GET /products` | ✅ Conectada (PR 4) |
-| **Dashboard** | `/user/dashboard` | `dashboard/data.ts` | — | ❌ Falta todo |
+| ~~**Dashboard**~~ | `/user/dashboard` | API | `GET /dashboard`, `GET /dashboard/options` | ✅ Conectada (PR 5) |
 | **Alertas y reglas** | `/user/alertas`, `/user/regla-nueva`, campana | `alertas/data.ts`, `rule-data.ts` | Solo tablas | ❌ Ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
 | **Curaduría** | `/admin/curaduria` | `curaduria/data.ts` | — | ❌ Falta todo |
 | **Operación** | `/admin/operacion` | `operacion/data.ts` | `GET /admin/scraping/runs`, `POST /admin/scraping/run` **existen** | 🟡 Falta resumen por tienda y log de errores |
@@ -55,7 +55,7 @@ La matriz, la ficha y las alertas marcan cuando una tienda achica el contenido n
 - ~~Depende de 2.2: con `prices.grammage` poblado, se detecta comparando el último gramaje de cada `listing` con el anterior distinto.~~ **Hecho (PR 3)** en `services/matrix._shrinkflation`: últimos 90 días, misma unidad, contenido actual menor que uno anterior. Cuenta también unidades (`15 → 12 u`).
 - ~~Se expone en la matriz (por celda) y en la ficha (marca en el gráfico).~~ ✅ **Hecho (PR 4):** `services/shrinkflation.shrinkflation_by_listing`, compartido por la matriz y la ficha.
 
-### 2.5 Índice de precios por categoría (base del dashboard)
+### ~~2.5 Índice de precios por categoría (base del dashboard)~~ ✅
 
 > **Decisión (PR 3):** la matriz calcula la variación de 30 días con consultas directas (último precio regular antes del corte), sin continuous aggregate: los tests arman el esquema con `create_all` y no podrían probarlo. El continuous aggregate queda para el dashboard (PR 5), si hace falta por rendimiento.
 
@@ -77,6 +77,16 @@ GROUP BY day, listing_id;
 
 Con eso, el índice de una categoría entre `start` y `end` es la media (geométrica o ponderada por cantidad de productos) de `precio_end / precio_start` de los canónicos que tienen precio en ambas fechas. Usar el **precio regular**, no el de promo, para que una oferta temporal no distorsione la inflación base.
 
+**Hecho (PR 5)**, sin continuous aggregate (misma razón que la matriz). `services/dashboard.py` arma un índice **Jevons encadenado diario** por categoría:
+
+- Cada día el índice se mueve según la media geométrica de la variación día a día de cada publicación (`listing`), con el **precio regular** (`coalesce(regular_price, local_price)`).
+- Si los dos días publican contenido neto en la misma unidad, compara **precio por gramo/ml/unidad**: la reduflación cuenta como suba.
+- Una publicación arrastra su último precio hasta 7 días (el scraper puede saltear un día); después sale del índice hasta que vuelve. Los productos nuevos entran sin mover el índice.
+- Variaciones diarias mayores a ×3 o menores a ÷3 se descartan como error de scraping.
+- Índice general = promedio de los índices por categoría ponderado por cantidad de productos.
+
+Si con un catálogo grande se pone lento, leer los precios diarios desde el continuous aggregate de arriba en vez de `prices`.
+
 ### ~~2.6 Cotizaciones históricas~~ ✅
 
 El dashboard y la ficha grafican el dólar día a día. `exchange_rates` ya es hypertable y se llena cada hora (`cron(ingest_rates)`). ~~Falta un endpoint de lectura para el cliente (ver §3.1).~~ **Hecho (PR 2):** `GET /rates/history`.
@@ -96,7 +106,7 @@ El dashboard y la ficha grafican el dólar día a día. `exchange_rates` ya es h
 
 ~~**Front a cambiar:** `quotes-card.tsx` y `lib/quotes.ts` pasan a leer de la API (hook `useRates()`).~~ ✅ `lib/rates.tsx` (`RatesProvider` en `ClientShell`, refresca cada 30 min; `useRates()` y `useQuoteValues()`). La tarjeta del sidebar y el selector de cotización de la matriz ya usan valores reales.
 
-Queda: `SNAPSHOT_QUOTES` sigue anclando los datos de muestra del dashboard (PR 5). ~~`QUOTES` en la ficha~~ ✅ la ficha ya usa la cotización de cada captura (PR 4).
+~~Queda: `SNAPSHOT_QUOTES` sigue anclando los datos de muestra del dashboard (PR 5).~~ ✅ Se borró en el PR 5: el selector de cotización del dashboard usa `useQuoteValues()`. ~~`QUOTES` en la ficha~~ ✅ la ficha ya usa la cotización de cada captura (PR 4).
 
 ### ~~3.2 Matriz de precios (`/user/matriz`)~~ ✅
 
@@ -141,7 +151,7 @@ Solo devuelve tiendas visibles para el usuario; si el producto no tiene publicac
 
 ~~**Front a cambiar:** `findProduct(slug)` → `GET /products/{id}`; `historyFor()` → `/history`; `compareCandidates()` → `/products?category=`.~~ ✅ `product-detail.tsx` lee `?id=`, con estados de carga, vacío y "no está en tus tiendas". Se borró `producto/data.ts`. La comparación usa los días en que los dos productos tienen precio (base 100 = el primero).
 
-### 3.4 Dashboard (`/user/dashboard`)
+### ~~3.4 Dashboard (`/user/dashboard`)~~ ✅
 
 **Front:** `components/dashboard/dashboard.tsx` y `dashboard-charts.tsx` + `dashboard/data.ts` (`summarize()` y `chartData()` generan todo con fórmulas).
 
@@ -167,7 +177,19 @@ Definiciones (para que coincidan con lo que muestra el front):
 - `gap`: `ars − devaluation`, en puntos porcentuales.
 - `products` por categoría: canónicos con precio en las tiendas filtradas.
 
-**Front a cambiar:** `summarize()`/`chartData()` se reemplazan por un fetch; la validación de filtros guardados en `localStorage` usa `options` en vez de las constantes. El botón "Crear alerta de pico" debe pasar `?category=` al formulario (ver ALERTAS-BACKEND.md §9).
+**Hecho (PR 5)** con la alternativa simple:
+
+| Endpoint | Respuesta |
+| --- | --- |
+| `GET /dashboard?start=&end=&stores=a,b&categories=x,y&rate=blue\|official` | `{ rate, start, end, summary, series, scatter, peaks }`. `start`/`end` son el primer y último día con precios dentro del rango pedido (el índice arranca ahí). `summary` es `null` si no hay al menos dos días con precios. `usd`, `devaluation` y `gap` son `null` si no hay cotizaciones. Rango máximo 366 días; por defecto, últimos 180 |
+| `GET /dashboard/options` | `{ stores: [{ slug, name }], categories, min_date, max_date }` |
+
+- Los índices por categoría de `series` vienen en ARS; el front los pasa a USD con `rate` del día y `summary.rate_from`. Los colores de cada categoría siguen en el front (`lib/categories.ts`).
+- `peaks`: la mayor suba en hasta 7 días de cada categoría, si supera 3 %.
+
+~~**Front a cambiar:** `summarize()`/`chartData()` se reemplazan por un fetch; la validación de filtros guardados en `localStorage` usa `options` en vez de las constantes.~~ ✅ Se borró `dashboard/data.ts` (queda `dashboard/filters.ts`). La vista guardada pasó a `v2` (tiendas por slug y categorías por valor de la API). Mientras llega la respuesta de un cambio de filtro se sigue mostrando la anterior, atenuada.
+
+**Pendiente:** el botón "Crear alerta de pico" ya pasa `?category=<valor>` (la categoría del pico más alto), pero el formulario de reglas todavía no lo lee (ALERTAS-BACKEND.md §9, PR 6).
 
 ### 3.5 Alertas y reglas
 
@@ -230,7 +252,7 @@ Cada PR deja algo usable y con tests.
 2. ~~**Cotizaciones para el cliente:** `GET /rates/latest` y `/rates/history`; conectar `quotes-card.tsx` y `lib/quotes.ts`. (§3.1)~~ ✅ Hecho.
 3. ~~**Matriz completa:** categoría, contenido, `variation_30d`, filtros y orden en `/matrix`; conectar `/user/matriz`. (§3.2)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 4. ~~**Ficha de producto:** `/products`, `/products/{id}`, `/products/{id}/history`; reduflación (§2.4); conectar `/user/producto`. (§3.3)~~ ✅ Hecho.
-5. **Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)
+5. ~~**Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 6. **Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)
 7. **Operación:** `overview`, `errors` y `scraping_events`; conectar `/admin/operacion`. (§3.7)
 8. **Curaduría:** `listing_matches`, `curation_events`, sugerencias con `pg_trgm` y endpoints; conectar `/admin/curaduria`. (§3.6)
@@ -244,7 +266,7 @@ Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
 ## 6. Del lado del front, al conectar
 
-- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, `dashboard`, `alertas`, `curaduria`, `operacion`, junto con `SNAPSHOT_QUOTES` (dashboard) y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
+- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), `alertas`, `curaduria`, `operacion`, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
 - Las llamadas van por `lib/api.ts` (ya maneja token y refresh).
 - Agregar estados de carga (`Skeleton`) y vacío: con datos reales puede no haber precios para un rango o una tienda.
 - ~~El vínculo a la ficha pasa de `?p=<slug>` a `?id=<uuid>`.~~ ✅ En las alertas de muestra, `productHref()` (ahora en `alertas/rule-data.ts`) lleva a la matriz hasta el PR 6.

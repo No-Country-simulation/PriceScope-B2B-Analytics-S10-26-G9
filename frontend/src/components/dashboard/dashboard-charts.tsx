@@ -15,9 +15,11 @@ import {
   ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import type { DashboardData, DashboardPoint } from "@/lib/api"
+import { CATEGORY_LABEL, PRODUCT_CATEGORIES } from "@/lib/categories"
 import { formatArs, formatPct } from "@/lib/format"
 import { QUOTE_LABEL } from "@/lib/quotes"
-import { CATEGORIES, chartData, type DashboardFilters, type DashboardSummary } from "./data"
+import type { DashboardFilters } from "./filters"
 
 const dateLabel = (date: string) => date.slice(0, 10).split("-").reverse().join("/")
 const axisDate = (date: string) => dateLabel(date).slice(0, 5)
@@ -34,19 +36,39 @@ const scatterConfig = {
   price: { label: "Variación del precio" },
 } satisfies ChartConfig
 
-export function DashboardCharts({ filters, summary }: {
-  filters: DashboardFilters; summary: DashboardSummary
+const COLOR = Object.fromEntries(PRODUCT_CATEGORIES.map((category) => [category.value, category.color]))
+
+// Axis bounds with some air; always includes 0 because prices can also fall.
+const bounds = (values: number[]) => [
+  Math.min(0, Math.floor(Math.min(...values) * 1.1)),
+  Math.max(1, Math.ceil(Math.max(...values) * 1.1)),
+]
+
+export function DashboardCharts({ filters, data }: {
+  filters: DashboardFilters; data: DashboardData
 }) {
-  const data = React.useMemo(() => chartData(filters, summary), [filters, summary])
-  const categoryConfig = Object.fromEntries(CATEGORIES
-    .filter((category) => filters.categories.includes(category.name))
-    .map((category) => [category.name, { label: category.name, color: category.color }])) satisfies ChartConfig
-  const categorySeries = data.series.map((point) => ({ date: point.date, ...point.categories }))
-  const above = data.scatter.filter((point) => point.price > point.fx)
-  const below = data.scatter.filter((point) => point.price <= point.fx)
-  const fxMax = Math.max(1, Math.ceil(Math.max(...data.scatter.map((point) => point.fx)) * 1.1))
-  const priceMax = Math.max(1, Math.ceil(Math.max(...data.scatter.map((point) => point.price)) * 1.1))
-  const diagonalMax = Math.min(fxMax, priceMax)
+  const present = data.summary?.rows.map((row) => row.category) ?? []
+  const categoryConfig = Object.fromEntries(PRODUCT_CATEGORIES
+    .filter((category) => present.includes(category.value))
+    .map((category) => [category.value, { label: category.label, color: category.color }])) satisfies ChartConfig
+  const rateFrom = data.summary?.rate_from ?? null
+  // The API sends the category indices in ARS; in USD each one is deflated by the rate.
+  const categorySeries = data.series.map((point) => {
+    const values: Record<string, number | string | null> = { date: point.date }
+    for (const category of present) {
+      const index = point.categories[category] ?? null
+      values[category] = index === null || filters.currency === "ARS" ? index
+        : rateFrom && point.rate ? index * rateFrom / point.rate : null
+    }
+    return values
+  })
+  const scatter = data.scatter.map((point) => ({ ...point, label: CATEGORY_LABEL[point.category] }))
+  const above = scatter.filter((point) => point.price > point.fx)
+  const below = scatter.filter((point) => point.price <= point.fx)
+  const [fxMin, fxMax] = bounds(scatter.map((point) => point.fx))
+  const [priceMin, priceMax] = bounds(scatter.map((point) => point.price))
+  const diagonal = [Math.max(fxMin, priceMin), Math.min(fxMax, priceMax)]
+  const peakCategory = data.peaks[0]?.category
 
   return (
     <>
@@ -54,10 +76,10 @@ export function DashboardCharts({ filters, summary }: {
         <Card className="min-w-0 shadow-xs">
           <CardHeader>
             <CardTitle><h3>Evolución de precios</h3></CardTitle>
-            <CardDescription>Índice base 100 = {dateLabel(filters.start)} · eje derecho: dólar {QUOTE_LABEL[filters.quote].toLowerCase()} ($ por US$)</CardDescription>
+            <CardDescription>Índice base 100 = {dateLabel(data.start ?? filters.start)} · eje derecho: dólar {QUOTE_LABEL[filters.quote].toLowerCase()} ($ por US$)</CardDescription>
           </CardHeader>
           <CardContent className="min-w-0">
-            <EvolutionChart key={`${filters.start}-${filters.end}-${filters.quote}-${filters.currency}-${filters.categories.join()}`}
+            <EvolutionChart key={`${data.start}-${data.end}-${filters.stores.join()}-${filters.quote}-${filters.currency}-${filters.categories.join()}`}
               series={data.series} currency={filters.currency} />
           </CardContent>
         </Card>
@@ -70,16 +92,16 @@ export function DashboardCharts({ filters, summary }: {
           <CardContent className="flex flex-1 flex-col gap-4">
             {data.peaks.length ? <ul className="divide-y">
               {data.peaks.map((peak) => <li key={peak.category} className="flex items-center gap-3 py-3">
-                <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: peak.color }} aria-hidden="true" />
+                <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: COLOR[peak.category] }} aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{peak.category}</p>
+                  <p className="text-sm font-medium">{CATEGORY_LABEL[peak.category]}</p>
                   <p className="font-mono text-xs text-muted-foreground">{dateLabel(peak.date)}</p>
                 </div>
                 <ToneBadge tone="red" className="font-mono"><ArrowUpIcon />{formatPct(peak.value)}</ToneBadge>
               </li>)}
             </ul> : <p className="py-6 text-sm text-muted-foreground">No se detectaron picos mayores a 3 % en esta selección.</p>}
             <Button variant="outline" size="sm" className="mt-auto" nativeButton={false}
-              render={<Link href="/user/regla-nueva" />}>Crear alerta de pico</Button>
+              render={<Link href={peakCategory ? `/user/regla-nueva?category=${peakCategory}` : "/user/regla-nueva"} />}>Crear alerta de pico</Button>
           </CardContent>
         </Card>
       </div>
@@ -88,25 +110,26 @@ export function DashboardCharts({ filters, summary }: {
         <Card className="min-w-0 shadow-xs">
           <CardHeader>
             <CardTitle><h3>Precio vs tipo de cambio</h3></CardTitle>
-            <CardDescription>Cada punto: una categoría en un mes (extremos parciales). {above.length} de {data.scatter.length} subieron más que el dólar {QUOTE_LABEL[filters.quote].toLowerCase()}.</CardDescription>
+            <CardDescription>Cada punto: una categoría en un mes (extremos parciales). {above.length} de {scatter.length} subieron más que el dólar {QUOTE_LABEL[filters.quote].toLowerCase()}.</CardDescription>
           </CardHeader>
           <CardContent>
+            {scatter.length ? <>
             <ChartContainer config={scatterConfig} className="h-80 w-full aspect-auto" role="img"
               aria-label="Dispersión de variación mensual de precios en ARS frente al dólar">
               <ScatterChart margin={{ top: 16, right: 16, bottom: 24, left: 0 }}>
                 <CartesianGrid vertical={false} />
-                <XAxis type="number" dataKey="fx" name="Variación del dólar" domain={[0, fxMax]} tickCount={5}
+                <XAxis type="number" dataKey="fx" name="Variación del dólar" domain={[fxMin, fxMax]} tickCount={5}
                   tickFormatter={(value: number) => `${decimal(value)} %`} tickLine={false}
                   label={{ value: "Variación mensual del dólar", position: "bottom", offset: 8 }} />
-                <YAxis type="number" dataKey="price" name="Variación del precio" domain={[0, priceMax]} tickCount={5}
+                <YAxis type="number" dataKey="price" name="Variación del precio" domain={[priceMin, priceMax]} tickCount={5}
                   tickFormatter={(value: number) => `${decimal(value)} %`} tickLine={false} axisLine={false} width={50} />
-                <ReferenceLine segment={[{ x: 0, y: 0 }, { x: diagonalMax, y: diagonalMax }]}
+                <ReferenceLine segment={[{ x: diagonal[0], y: diagonal[0] }, { x: diagonal[1], y: diagonal[1] }]}
                   stroke="var(--muted-foreground)" strokeDasharray="4 4" />
                 <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={({ active, payload }) => {
                   const point = payload?.[0]?.payload
                   if (!active || !point) return null
                   return <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
-                    <p className="mb-1 font-medium">{point.category} · {point.month}</p>
+                    <p className="mb-1 font-medium">{point.label} · {point.month}</p>
                     <p>Precio ARS: {formatPct(point.price)}</p>
                     <p>Dólar: {formatPct(point.fx)}</p>
                   </div>
@@ -120,6 +143,7 @@ export function DashboardCharts({ filters, summary }: {
               <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full border-2 border-emerald-400" />Subió menos que el dólar</span>
               <span>Línea punteada: igual variación</span>
             </div>
+            </> : <p className="py-6 text-sm text-muted-foreground">No hay cotizaciones del dólar para este período.</p>}
           </CardContent>
         </Card>
 
@@ -141,7 +165,7 @@ export function DashboardCharts({ filters, summary }: {
                 {Object.keys(categoryConfig).map((name) => <Line key={name} dataKey={name} type="linear"
                   stroke={`var(--color-${name})`} strokeWidth={2} dot={false} isAnimationActive={false} />)}
                 {data.peaks.map((peak) => <ReferenceDot key={peak.category} x={peak.date}
-                  y={data.series.find((point) => point.date === peak.date)!.categories[peak.category]}
+                  y={categorySeries.find((point) => point.date === peak.date)?.[peak.category] as number}
                   r={3} fill="var(--foreground)" stroke="var(--background)"
                   label={{ value: "▼", position: "top", fill: "var(--foreground)", fontSize: 12 }} />)}
               </LineChart>
@@ -154,7 +178,7 @@ export function DashboardCharts({ filters, summary }: {
 }
 
 function EvolutionChart({ series, currency }: {
-  series: ReturnType<typeof chartData>["series"]; currency: DashboardFilters["currency"]
+  series: DashboardPoint[]; currency: DashboardFilters["currency"]
 }) {
   const [range, setRange] = React.useState({ startIndex: 0, endIndex: series.length - 1 })
   return <>
