@@ -73,5 +73,5 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
 function AdminHeader() {
   const pathname = usePathname()
-  return <SiteHeader title={adminPageTitle(pathname)} />
+  return <SiteHeader title={adminPageTitle(pathname)} section={pathname.startsWith("/admin/curaduria") ? "Calidad de datos" : undefined} />
 }
