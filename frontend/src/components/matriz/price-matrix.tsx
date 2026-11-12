@@ -50,7 +50,8 @@ import {
 } from "@/components/ui/tooltip"
 import { downloadCsv } from "@/lib/csv"
 import { formatArs, formatPct, formatUsd } from "@/lib/format"
-import { QUOTES, QUOTE_LABEL, type Quote } from "@/lib/quotes"
+import { QUOTE_LABEL, type Quote } from "@/lib/quotes"
+import { useQuoteValues } from "@/lib/rates"
 import { cn } from "@/lib/utils"
 
 import { slugOf } from "@/components/producto/data"
@@ -79,10 +80,12 @@ const currencyItems = [
   { label: "Dólares (USD)", value: "USD" },
 ]
 
-const quoteItems = (Object.keys(QUOTES) as Quote[]).map((value) => ({
-  label: `${QUOTE_LABEL[value]} · ${formatArs(QUOTES[value])}`,
-  value,
-}))
+function quoteItemsFor(values: Record<Quote, number>) {
+  return (Object.keys(values) as Quote[]).map((value) => ({
+    label: `${QUOTE_LABEL[value]} · ${formatArs(values[value])}`,
+    value,
+  }))
+}
 
 const pageSizeItems = PAGE_SIZES.map((size) => ({
   label: String(size),
@@ -134,7 +137,10 @@ export function PriceMatrix() {
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState(PAGE_SIZES[0])
 
-  const rate = QUOTES[quote]
+  // Real rates from GET /rates/latest; prices are still the UX05 sample.
+  const { values: quoteValues } = useQuoteValues()
+  const quoteItems = React.useMemo(() => quoteItemsFor(quoteValues), [quoteValues])
+  const rate = quoteValues[quote]
   const hasFilters = search !== "" || category !== "all" || signal !== "all"
 
   const rows = React.useMemo(() => {

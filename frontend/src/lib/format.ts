@@ -24,6 +24,23 @@ const shortDate = new Intl.DateTimeFormat("es-AR", {
   month: "short",
 })
 
+const quoteTime = new Intl.DateTimeFormat("es-AR", {
+  timeZone: TIME_ZONE,
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+})
+
+// "12/11 · 16:00": when a rate was quoted, in Argentina time.
+export function formatQuoteTime(iso: string) {
+  const parts = Object.fromEntries(
+    quoteTime.formatToParts(new Date(iso)).map((part) => [part.type, part.value])
+  )
+  return `${parts.day}/${parts.month} · ${parts.hour}:${parts.minute}`
+}
+
 export function formatShortDate(iso: string) {
   return shortDate.format(new Date(iso))
 }

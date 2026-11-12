@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -113,3 +113,40 @@ async def latest_rates(db: AsyncSession) -> list[ExchangeRate]:
         .order_by(ExchangeRate.type, ExchangeRate.quoted_at.desc())
     )
     return list(rows)
+
+
+# Days are cut in Argentina time: a rate quoted at 22:00 local belongs to that day.
+BUSINESS_TIME_ZONE = "America/Argentina/Buenos_Aires"
+MAX_HISTORY_DAYS = 366
+
+
+def gap_pct(official: Decimal | None, blue: Decimal | None) -> Decimal | None:
+    """How much the blue rate is above the official, in %, with two decimals."""
+    if not official or blue is None:
+        return None
+    return ((blue - official) / official * 100).quantize(Decimal("0.01"))
+
+
+async def rate_history(
+    db: AsyncSession, rate_type: RateType, start: date, end: date
+) -> list[tuple[date, Decimal]]:
+    """Last sell rate of each day between start and end (inclusive), in Argentina time.
+
+    Days without quotes are skipped; the client decides how to draw the gap.
+    """
+    local_day = cast(func.timezone(BUSINESS_TIME_ZONE, ExchangeRate.quoted_at), Date)
+    rows = await db.execute(
+        select(local_day.label("day"), ExchangeRate.sell)
+        .where(
+            ExchangeRate.type == rate_type,
+            # Wide UTC window (± 1 day), then filtered by the local day.
+            ExchangeRate.quoted_at
+            >= datetime.combine(start - timedelta(days=1), datetime.min.time(), UTC),
+            ExchangeRate.quoted_at
+            < datetime.combine(end + timedelta(days=2), datetime.min.time(), UTC),
+            local_day.between(start, end),
+        )
+        .ext(distinct_on(local_day))
+        .order_by(local_day, ExchangeRate.quoted_at.desc())
+    )
+    return [(row.day, row.sell) for row in rows]

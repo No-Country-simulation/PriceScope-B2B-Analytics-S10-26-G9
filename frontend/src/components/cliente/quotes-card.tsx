@@ -1,18 +1,27 @@
+"use client"
+
 import { DollarSignIcon } from "lucide-react"
 
-import { SNAPSHOT_QUOTES } from "@/components/dashboard/data"
-import { formatArs } from "@/lib/format"
+import { Skeleton } from "@/components/ui/skeleton"
+import { formatArs, formatQuoteTime } from "@/lib/format"
 import { QUOTE_LABEL, type Quote } from "@/lib/quotes"
+import { useRates } from "@/lib/rates"
 
-// Cotizaciones de muestra (mismo snapshot que UX04). Cuando entre la API, el
-// valor y la hora salen de ahí.
-const QUOTE_ORDER: Quote[] = ["oficial", "blue"]
-const gap = ((SNAPSHOT_QUOTES.blue - SNAPSHOT_QUOTES.oficial) / SNAPSHOT_QUOTES.oficial) * 100
+const QUOTE_ORDER: { quote: Quote; key: "official" | "blue" }[] = [
+  { quote: "oficial", key: "official" },
+  { quote: "blue", key: "blue" },
+]
 
+// Latest official and blue rates from GET /rates/latest.
 export function QuotesCard() {
+  const { status, latest } = useRates()
+  const quotedAt = latest?.blue?.quoted_at ?? latest?.official?.quoted_at
+  const gap = latest?.gap_pct != null ? Number(latest.gap_pct) : null
+
   return (
     <section
       aria-label="Cotización del dólar"
+      aria-busy={status === "loading"}
       className="flex flex-col gap-3 rounded-lg border bg-background p-3 shadow-xs group-data-[collapsible=icon]:hidden"
     >
       <div className="flex items-center justify-between gap-2">
@@ -23,20 +32,29 @@ export function QuotesCard() {
           Cotización del dólar
         </span>
       </div>
-      <dl className="flex flex-col gap-1.5">
-        {QUOTE_ORDER.map((quote) => (
-          <div key={quote} className="flex items-center justify-between gap-2 text-sm">
-            <dt className="text-muted-foreground">{QUOTE_LABEL[quote]}</dt>
-            <dd className="font-mono font-medium tabular-nums">
-              {formatArs(SNAPSHOT_QUOTES[quote])}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <p className="flex items-center justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
-        <span>Brecha {gap.toFixed(1).replace(".", ",")} %</span>
-        <span className="font-mono tabular-nums">29/10 · 06:00</span>
-      </p>
+      {status === "error" ? (
+        <p className="text-xs text-muted-foreground">No pudimos cargar la cotización.</p>
+      ) : (
+        <>
+          <dl className="flex flex-col gap-1.5">
+            {QUOTE_ORDER.map(({ quote, key }) => {
+              const sell = latest?.[key]?.sell
+              return (
+                <div key={quote} className="flex items-center justify-between gap-2 text-sm">
+                  <dt className="text-muted-foreground">{QUOTE_LABEL[quote]}</dt>
+                  <dd className="font-mono font-medium tabular-nums">
+                    {status === "loading" ? <Skeleton className="h-4 w-16" /> : sell != null ? formatArs(Number(sell)) : "—"}
+                  </dd>
+                </div>
+              )
+            })}
+          </dl>
+          <p className="flex items-center justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
+            <span>{gap != null ? `Brecha ${gap.toFixed(1).replace(".", ",")} %` : "Brecha —"}</span>
+            <span className="font-mono tabular-nums">{quotedAt ? formatQuoteTime(quotedAt) : ""}</span>
+          </p>
+        </>
+      )}
     </section>
   )
 }

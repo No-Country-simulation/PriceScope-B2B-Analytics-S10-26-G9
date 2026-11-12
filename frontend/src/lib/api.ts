@@ -70,6 +70,20 @@ export type Store = {
 // What a client sees of a store (GET /stores): no scraping details.
 export type ClientStore = Pick<Store, "id" | "name" | "slug" | "category">
 
+// GET /rates/latest. Decimals come as strings to keep their precision.
+export type RateQuote = {
+  source: string
+  buy: string | null
+  sell: string
+  quoted_at: string
+}
+
+export type LatestRates = {
+  official: RateQuote | null
+  blue: RateQuote | null
+  gap_pct: string | null
+}
+
 export type DemoRequest = {
   id: string
   company: string

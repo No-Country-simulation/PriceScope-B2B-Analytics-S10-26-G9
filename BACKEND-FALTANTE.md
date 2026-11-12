@@ -12,7 +12,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | Solicitar demo | `/demo` | API | `POST /demo/requests` | ✅ Conectada |
 | Mi cuenta | `/user/perfil` | API | `/account/*` | ✅ Conectada |
 | Admin · Solicitudes, Usuarios | `/admin/solicitudes`, `/admin/usuarios` | API | `/admin/demo-requests`, `/admin/users` | ✅ Conectada |
-| **Cotización del dólar** (sidebar) | todas las de `/user` | `dashboard/data.ts` (`SNAPSHOT_QUOTES`) | Solo existe `GET /admin/rates` (admin) | ❌ Falta endpoint para cliente |
+| ~~**Cotización del dólar** (sidebar)~~ | todas las de `/user` | API | `GET /rates/latest`, `GET /rates/history` | ✅ Conectada (PR 2) |
 | **Matriz de precios** | `/user/matriz` | `matriz/data.ts` | `GET /matrix` **existe** | 🟡 Falta categoría, variación, reduflación y conectar |
 | **Ficha de producto** | `/user/producto?p=…` | `producto/data.ts` | — | ❌ Falta todo |
 | **Dashboard** | `/user/dashboard` | `dashboard/data.ts` | — | ❌ Falta todo |
@@ -76,26 +76,26 @@ GROUP BY day, listing_id;
 
 Con eso, el índice de una categoría entre `start` y `end` es la media (geométrica o ponderada por cantidad de productos) de `precio_end / precio_start` de los canónicos que tienen precio en ambas fechas. Usar el **precio regular**, no el de promo, para que una oferta temporal no distorsione la inflación base.
 
-### 2.6 Cotizaciones históricas
+### ~~2.6 Cotizaciones históricas~~ ✅
 
-El dashboard y la ficha grafican el dólar día a día. `exchange_rates` ya es hypertable y se llena cada hora (`cron(ingest_rates)`). Falta un endpoint de lectura para el cliente (ver §3.1).
+El dashboard y la ficha grafican el dólar día a día. `exchange_rates` ya es hypertable y se llena cada hora (`cron(ingest_rates)`). ~~Falta un endpoint de lectura para el cliente (ver §3.1).~~ **Hecho (PR 2):** `GET /rates/history`.
 
 ## 3. Pantalla por pantalla
 
-### 3.1 Cotización del dólar (sidebar del cliente)
+### ~~3.1 Cotización del dólar (sidebar del cliente)~~ ✅
 
 **Front:** `components/cliente/quotes-card.tsx` (lee `SNAPSHOT_QUOTES`), `lib/quotes.ts` (`QUOTES`, usado por la matriz y la ficha para pasar ARS → USD).
 
-**Falta:**
+**Hecho (PR 2):**
 
 | Endpoint | Respuesta |
 | --- | --- |
-| `GET /rates/latest` (cualquier usuario logueado) | `{ official: { sell, quoted_at }, blue: { sell, quoted_at }, gap_pct }` |
-| `GET /rates/history?type=blue&start=&end=` | `[{ date, sell }]`, último valor de cada día |
+| ~~`GET /rates/latest` (cualquier usuario logueado)~~ ✅ | `{ official: { source, buy, sell, quoted_at }, blue: {…}, gap_pct }` (`null` si no hay cotización) |
+| ~~`GET /rates/history?type=blue&start=&end=`~~ ✅ | `[{ date, sell }]`, último valor de cada día en hora argentina. Por defecto, últimos 30 días; máximo 366 |
 
-Reusa `services/rates.latest_rates`. El de admin (`GET /admin/rates`) puede quedar como está.
+~~**Front a cambiar:** `quotes-card.tsx` y `lib/quotes.ts` pasan a leer de la API (hook `useRates()`).~~ ✅ `lib/rates.tsx` (`RatesProvider` en `ClientShell`, refresca cada 30 min; `useRates()` y `useQuoteValues()`). La tarjeta del sidebar y el selector de cotización de la matriz ya usan valores reales.
 
-**Front a cambiar:** `quotes-card.tsx` y `lib/quotes.ts` pasan a leer de la API (hook `useRates()`), y se borra `SNAPSHOT_QUOTES`.
+Queda: `SNAPSHOT_QUOTES` (dashboard) y `QUOTES` en la ficha siguen anclando los datos de muestra; se borran en los PR 4 y 5, cuando esas pantallas tengan precios reales.
 
 ### 3.2 Matriz de precios (`/user/matriz`)
 
@@ -218,7 +218,7 @@ Hoy un `listing` se vincula al canónico **solo si trae EAN** (`record_observati
 Cada PR deja algo usable y con tests.
 
 1. ~~**Base de catálogo:** enum `ProductCategory` + `canonical_products.category/brand/content/grammage/unit`, categoría y contenido neto automáticos al registrar precios, script de relleno y `GET /stores`. (§2.1–2.3)~~ ✅ Hecho en `feat/backend-datos-reales`.
-2. **Cotizaciones para el cliente:** `GET /rates/latest` y `/rates/history`; conectar `quotes-card.tsx` y `lib/quotes.ts`. (§3.1)
+2. ~~**Cotizaciones para el cliente:** `GET /rates/latest` y `/rates/history`; conectar `quotes-card.tsx` y `lib/quotes.ts`. (§3.1)~~ ✅ Hecho.
 3. **Matriz completa:** categoría, contenido, `variation_30d`, filtros y orden en `/matrix`; continuous aggregate `daily_prices`; conectar `/user/matriz`. (§2.5, §3.2)
 4. **Ficha de producto:** `/products`, `/products/{id}`, `/products/{id}/history`; reduflación (§2.4); conectar `/user/producto`. (§3.3)
 5. **Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)
