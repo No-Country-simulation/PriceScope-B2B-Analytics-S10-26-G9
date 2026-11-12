@@ -66,7 +66,6 @@ uv run arq app.workers.tareas.WorkerSettings --watch app   # terminal 3
 - `scripts/seed.py` acepta `SEED_ADMIN_CORREO`, `SEED_ADMIN_NOMBRE` y `SEED_ADMIN_PASSWORD` para correr sin preguntas.
 - Ruff excluye `docs/` (para que no reformatee los bloques de código de las guías) y `migrations/versions`.
 - Admin de desarrollo creado en la base local: `admin@example.com` / `Admin12345`. **Solo local**; creá el tuyo con el seed.
-- Quedan sin tocar: `src/pricescrope_backend/` (paquete que generó `uv init`, con typo en el nombre) y `test/test.app.py` (vacío; los tests reales están en `tests/`).
 
 ## Pendiente
 
