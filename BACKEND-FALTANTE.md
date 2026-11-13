@@ -18,7 +18,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | ~~**Dashboard**~~ | `/user/dashboard` | API | `GET /dashboard`, `GET /dashboard/options` | ✅ Conectada (PR 5) |
 | ~~**Alertas y reglas**~~ | `/user/alertas`, `/user/regla-nueva`, campana | API | `/alert-rules/*`, `/alerts/*`, tarea `evaluate_alert_rules` | ✅ Conectada (PR 6), ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
 | **Curaduría** | `/admin/curaduria` | `curaduria/data.ts` | — | ❌ Falta todo |
-| **Operación** | `/admin/operacion` | `operacion/data.ts` | `GET /admin/scraping/runs`, `POST /admin/scraping/run` **existen** | 🟡 Falta resumen por tienda y log de errores |
+| ~~**Operación**~~ | `/admin/operacion` | API | `GET /admin/scraping/overview`, `GET /admin/scraping/errors`, `POST /admin/scraping/stores/{slug}/enqueue` | ✅ Conectada (PR 7) |
 
 ## 2. Dependencias transversales
 
@@ -223,9 +223,9 @@ Hoy un `listing` se vincula al canónico **solo si trae EAN** (`record_observati
 | `GET /history?limit=` | Tabla de historial |
 | `POST /history/{id}/revert` | "Revertir" (solo el último no revertido, igual que el front) |
 
-### 3.7 Operación (`/admin/operacion`)
+### ~~3.7 Operación (`/admin/operacion`)~~ ✅
 
-**Front:** `components/operacion/operation-board.tsx`, `scraper-card.tsx`, `error-log.tsx` + `operacion/data.ts`.
+**Front:** `components/operacion/operation-board.tsx`, `scraper-card.tsx`, `error-log.tsx` + ~~`operacion/data.ts`~~ `operacion/labels.ts`.
 
 **Ya existe:**
 
@@ -233,16 +233,26 @@ Hoy un `listing` se vincula al canónico **solo si trae EAN** (`record_observati
 - `POST /admin/scraping/run` (disparar extracción).
 - `GET /admin/scraping/stores/readiness`.
 
-**Lo que el front usa y falta:**
+~~**Lo que el front usa y falta:**~~ ✅ Hecho en el PR 7:
 
 | Dato del front | Qué agregar |
 | --- | --- |
-| Tarjeta por tienda: estado, última ejecución, duración, productos, esperados, horario | `GET /admin/scraping/overview` → `[{ store_slug, store_name, schedule, last_run: {status, started_at, finished_at, observations_saved}, expected, trend_7d: [int] }]`. `expected` = mediana de `observations_saved` de los últimos 7 runs exitosos; `schedule` sale de los `cron_jobs` del worker (dejarlo en una constante compartida) |
-| Barras "últimos 7 días" | `trend_7d` en el mismo endpoint (suma de `observations_saved` por día) |
-| "Reintentar" y "Ejecutar todos" | Ya está `POST /admin/scraping/run`; verificar que acepte "todas las tiendas" o hacer N llamadas. El front debe hacer polling de `/runs` hasta que el estado deje de ser `running` |
-| Log de errores con tipo (`timeout`, `block`, `markup`, `invalid`), severidad y detalle | `GET /admin/scraping/errors?hours=24\|72\|168&store=&kind=`. Se puede armar desde `scraping_runs.error_code`/`error_message` mapeando códigos a `kind`; para los avisos (reintentos exitosos, precios descartados) hace falta una tabla `scraping_events` (`run_id`, `severity`, `kind`, `message`, `detail`, `created_at`) que escriban los scrapers |
+| ~~Tarjeta por tienda: estado, última ejecución, duración, productos, esperados, horario~~ ✅ | `GET /admin/scraping/overview` → `[{ store_slug, store_name, schedule, last_run: {status, started_at, finished_at, observations_saved}, expected, trend_7d: [int] }]`. `expected` = mediana de `observations_saved` de los últimos 7 runs exitosos; `schedule` sale de los `cron_jobs` del worker (dejarlo en una constante compartida) |
+| ~~Barras "últimos 7 días"~~ ✅ | `trend_7d` en el mismo endpoint (suma de `observations_saved` por día) |
+| ~~"Reintentar" y "Ejecutar todos"~~ ✅ | ~~Ya está `POST /admin/scraping/run`; verificar que acepte "todas las tiendas" o hacer N llamadas. El front debe hacer polling de `/runs` hasta que el estado deje de ser `running`~~ `/run` no servía: corre la extracción dentro del request y pide un término. Se agregó `POST /admin/scraping/stores/{slug}/enqueue` (202), que encola en ARQ el mismo job diario del cron; 409 si la tienda ya tiene una ejecución en curso, 503 si los jobs programados no están habilitados. "Ejecutar todo" hace una llamada por tienda. El front consulta `overview` cada 5 s mientras hay algo en cola o en curso (si no, cada minuto) y avisa al terminar |
+| ~~Log de errores con tipo (`timeout`, `block`, `markup`, `invalid`), severidad y detalle~~ ✅ | `GET /admin/scraping/errors?hours=24\|72\|168&store=&kind=`, armado desde `scraping_runs` fallidos. Tipos: `timeout`, `network`, `block` (401/403/429), `server` (5xx), `markup` (JSON o lista inválida), `interrupted` y `other`. **Severidad sin tabla nueva:** una falla es `warning` si después hubo una ejecución exitosa de la misma tienda ("se resolvió"), si no `error`. ~~Tabla `scraping_events`~~: queda pendiente solo para avisos que hoy nadie registra (precios descartados por inválidos); hace falta que los scrapers los escriban |
 
-**Nota:** el front de muestra usa tiendas de ejemplo (Supermercado Delta, Hiper Sur, Mercado Norte). Las reales hoy son Carrefour y Jumbo.
+~~**Nota:** el front de muestra usa tiendas de ejemplo (Supermercado Delta, Hiper Sur, Mercado Norte). Las reales hoy son Carrefour y Jumbo.~~ ✅ La pantalla muestra las tiendas activas reales.
+
+Además (PR 7):
+
+- Los horarios de los jobs diarios quedaron en una constante, `services/operation.DAILY_SCRAPES`, que leen el cron del worker y la pantalla.
+- `overview` trae también el estado de la ingesta de cotizaciones: última cotización, fuente, OK si llegó una en las últimas 2 horas e ingestas de las últimas 24 h.
+- La pantalla tiene dos secciones: **Dólar** (oficial y blue con compra y venta, brecha, 7 días, salud de la ingesta y botón "Actualizar dólar", que usa el `POST /admin/rates/refresh` que ya existía) y **Scrapers**.
+- El ítem "Operación" del sidebar del admin muestra el estado a simple vista: chip rojo con la cantidad de scrapers con fallo, punto ámbar si las cotizaciones están atrasadas, azul si hay una extracción en curso y verde si está todo bien.
+- Las barras de 7 días cuentan la mejor ejecución de cada día (no la suma) y los días sin ejecuciones se ven en gris, no en rojo.
+- Arreglo general: los avisos (`sonner`) seguían el modo oscuro del sistema operativo aunque la app es siempre clara, y la descripción quedaba ilegible.
+- Con datos reales, las fallas que aparecen hoy son HTTP 400 de VTEX: es el problema de búsqueda con espacios de §5.
 
 ## 4. Orden sugerido de PRs
 
@@ -254,7 +264,7 @@ Cada PR deja algo usable y con tests.
 4. ~~**Ficha de producto:** `/products`, `/products/{id}`, `/products/{id}/history`; reduflación (§2.4); conectar `/user/producto`. (§3.3)~~ ✅ Hecho.
 5. ~~**Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 6. ~~**Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)~~ ✅ Hecho.
-7. **Operación:** `overview`, `errors` y `scraping_events`; conectar `/admin/operacion`. (§3.7)
+7. ~~**Operación:** `overview`, `errors` y `scraping_events`; conectar `/admin/operacion`. (§3.7)~~ ✅ Hecho, sin `scraping_events` (ver §3.7).
 8. **Curaduría:** `listing_matches`, `curation_events`, sugerencias con `pg_trgm` y endpoints; conectar `/admin/curaduria`. (§3.6)
 
 Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
@@ -266,7 +276,7 @@ Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
 ## 6. Del lado del front, al conectar
 
-- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), ~~`alertas`~~ ✅ (`data.ts`, `rule-data.ts` y `sample-products.ts`), `curaduria`, `operacion`, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
+- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), ~~`alertas`~~ ✅ (`data.ts`, `rule-data.ts` y `sample-products.ts`), `curaduria`, ~~`operacion`~~ ✅, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
 - Las llamadas van por `lib/api.ts` (ya maneja token y refresh).
 - Agregar estados de carga (`Skeleton`) y vacío: con datos reales puede no haber precios para un rango o una tienda.
 - ~~El vínculo a la ficha pasa de `?p=<slug>` a `?id=<uuid>`.~~ ✅ Las alertas también linkean a `/user/producto?id=` desde el PR 6.

@@ -15,6 +15,10 @@ import {
   UsersIcon,
 } from "lucide-react"
 
+import {
+  OperationStatusBadge,
+  useOperationStatus,
+} from "@/components/admin/operation-status"
 import { InitialsAvatar } from "@/components/admin/tone"
 import {
   DropdownMenu,
@@ -33,6 +37,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -143,13 +148,21 @@ function ActiveAdminNavMenu() {
   return <AdminNavMenu pathname={usePathname()} />
 }
 
+const OPERATION_URL = "/admin/operacion"
+
 function AdminNavMenu({ pathname }: { pathname: string | null }) {
+  // Scraper health at a glance next to "Operación" (see operation-status.tsx).
+  const operation = useOperationStatus()
   return (
     <SidebarMenu>
       {adminNav.map((item) => (
         <SidebarMenuItem key={item.url}>
           <SidebarMenuButton
-            tooltip={item.title}
+            tooltip={
+              item.url === OPERATION_URL && operation
+                ? `${item.title} · ${operation.label}`
+                : item.title
+            }
             isActive={pathname?.startsWith(item.url) ?? false}
             render={<Link href={item.url} />}
             className="data-active:bg-brand/10 data-active:text-brand-deep dark:data-active:text-indigo-300"
@@ -157,6 +170,11 @@ function AdminNavMenu({ pathname }: { pathname: string | null }) {
             <item.icon />
             <span>{item.title}</span>
           </SidebarMenuButton>
+          {item.url === OPERATION_URL && operation && (
+            <SidebarMenuBadge title={operation.label}>
+              <OperationStatusBadge status={operation} />
+            </SidebarMenuBadge>
+          )}
         </SidebarMenuItem>
       ))}
     </SidebarMenu>

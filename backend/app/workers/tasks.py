@@ -13,6 +13,7 @@ from app.core.database import SessionLocal
 from app.models import Store
 from app.scrapers.vtex_client import VtexFetchError
 from app.services import alerts, mail, rates
+from app.services.operation import DAILY_SCRAPES
 from app.services.scraping import scrape_vtex_store
 from app.services.scraping_lock import (
     ScrapeAlreadyRunningError,
@@ -257,22 +258,22 @@ class WorkerSettings:
             max_tries=1,
         ),
 
-        # Carrefour: every day at 09:00 UTC (06:00 Argentina).
+        # Carrefour: every day at 09:00 UTC (06:00 Argentina). Hours in operation.DAILY_SCRAPES.
         cron(
             scrape_carrefour,
-            hour=9,
-            minute=0,
+            hour=DAILY_SCRAPES["carrefour"][1],
+            minute=DAILY_SCRAPES["carrefour"][2],
             second=0,
             run_at_startup=False,
             unique=True,
             max_tries=SCRAPING_MAX_TRIES,
         ),
 
-        # Jumbo: every day at 09:30 UTC (06:30 Argentina).
+        # Jumbo: every day at 09:30 UTC (06:30 Argentina). Hours in operation.DAILY_SCRAPES.
         cron(
             scrape_jumbo,
-            hour=9,
-            minute=30,
+            hour=DAILY_SCRAPES["jumbo"][1],
+            minute=DAILY_SCRAPES["jumbo"][2],
             second=0,
             run_at_startup=False,
             unique=True,

@@ -24,24 +24,16 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
-import {
-  DEFAULT_PERIOD,
-  LOG_ENTRIES,
-  LOG_KIND_LABEL,
-  PERIOD_LABEL,
-  SEVERITY_TONE,
-  STORES,
-  type LogEntry,
-} from "./data"
+import { Skeleton } from "@/components/ui/skeleton"
+import { query, type OperationError } from "@/lib/api"
+import { formatDateTime } from "@/lib/format"
+import { useApi } from "@/lib/use-api"
+
+import { DEFAULT_PERIOD, LOG_KIND_LABEL, PERIOD_LABEL, SEVERITY_TONE } from "./labels"
 
 const kindItems = [
   { label: "Todos", value: "all" },
   ...Object.entries(LOG_KIND_LABEL).map(([value, label]) => ({ label, value })),
-]
-
-const storeItems = [
-  { label: "Todas", value: "all" },
-  ...STORES.map((store) => ({ label: store, value: store })),
 ]
 
 const periodItems = ["24", "72", "168"].map((value) => ({
@@ -49,27 +41,40 @@ const periodItems = ["24", "72", "168"].map((value) => ({
   value,
 }))
 
-// UX10 · Operación: log de errores de los scrapers, filtrable por tienda, tipo
-// y período. La fila expandido muestra la salida cruda del worker.
+// UX10 · Operación: log de errores de los scrapers (ejecuciones fallidas),
+// filtrable por tienda, tipo y período. La fila expandida muestra el detalle.
+// Una falla que una ejecución posterior resolvió figura como aviso.
 export function ErrorLog({
-  entries = LOG_ENTRIES,
+  stores,
   store,
   onStoreChange,
+  version,
 }: {
-  entries?: LogEntry[]
+  stores: { slug: string; name: string }[]
   store: string
   onStoreChange: (store: string) => void
+  /** Cambia cuando terminó una ejecución, para recargar el log. */
+  version: number
 }) {
   const [kind, setKind] = React.useState("all")
   const [period, setPeriod] = React.useState(DEFAULT_PERIOD)
   const [expanded, setExpanded] = React.useState<string | null>(null)
-
-  const filtered = entries.filter(
-    (entry) =>
-      (store === "all" || entry.store === store) &&
-      (kind === "all" || entry.kind === kind) &&
-      entry.age <= Number(period)
+  const { data, error, reload } = useApi<OperationError[]>(
+    `/admin/scraping/errors${query({
+      hours: period,
+      store: store === "all" ? null : store,
+      kind: kind === "all" ? null : kind,
+    })}`
   )
+  React.useEffect(() => {
+    if (version) reload()
+  }, [version, reload])
+  const filtered = data ?? []
+
+  const storeItems = [
+    { label: "Todas", value: "all" },
+    ...stores.map((item) => ({ label: item.name, value: item.slug })),
+  ]
 
   const hasFilters =
     store !== "all" || kind !== "all" || period !== DEFAULT_PERIOD
@@ -133,12 +138,18 @@ export function ErrorLog({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.length === 0 ? (
+          {!data ? (
+            <TableRow>
+              <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
+                {error ? "No pudimos cargar el log." : <Skeleton className="mx-auto h-24 w-full" />}
+              </TableCell>
+            </TableRow>
+          ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="h-40 text-center">
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
                   <InboxIcon className="size-6" />
-                  {entries.length === 0 ? (
+                  {!hasFilters ? (
                     <p>No hubo errores en este período.</p>
                   ) : (
                     <>
@@ -177,9 +188,9 @@ export function ErrorLog({
                       </Button>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
-                      {entry.date}
+                      {formatDateTime(entry.date)}
                     </TableCell>
-                    <TableCell>{entry.store}</TableCell>
+                    <TableCell>{entry.store_name}</TableCell>
                     <TableCell>
                       <ToneBadge tone={SEVERITY_TONE[entry.severity]}>
                         {LOG_KIND_LABEL[entry.kind]}

@@ -5,11 +5,14 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  // The app has no ThemeProvider yet, so it is always light. "system" would make
+  // sonner follow the OS dark mode and paint light-gray text on the light popover.
+  // resolvedTheme is undefined without a provider and keeps working if one is added.
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={(resolvedTheme ?? "light") as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: (
@@ -39,6 +42,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
+          // Same tokens as the popover, whatever theme sonner resolves.
+          description: "text-muted-foreground!",
         },
       }}
       {...props}
