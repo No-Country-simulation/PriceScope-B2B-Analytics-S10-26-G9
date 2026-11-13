@@ -257,7 +257,7 @@ function ProductView({ product }: { product: ProductData }) {
             <Button
               size="lg"
               nativeButton={false}
-              render={<Link href="/user/regla-nueva" />}
+              render={<Link href={`/user/regla-nueva?product=${product.id}`} />}
             >
               <BellPlusIcon data-icon="inline-start" />
               Crear alerta

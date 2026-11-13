@@ -228,6 +228,98 @@ export type DashboardOptions = {
   max_date: string | null
 }
 
+// Alert rules (/alert-rules) and fired alerts (/alerts). Decimals come as strings.
+export type AlertRuleKind = "devaluation" | "milestone"
+export type AlertRuleScope = "category" | "product"
+export type MilestoneKey = "cyberweek" | "black_friday" | "hot_sale" | "custom"
+export type RateType = "official" | "blue"
+
+export type RuleConditions = {
+  kind: AlertRuleKind
+  scope: AlertRuleScope
+  category: ProductCategory | null
+  canonical_product_id: string | null
+  store_id: string | null
+  rate_type: RateType
+  threshold_pp: string
+  period_days: number | null
+  milestone_key: MilestoneKey | null
+  starts_on: string | null
+  ends_on: string | null
+}
+
+export type AlertRuleInput = RuleConditions & {
+  name: string
+  notify_in_app: boolean
+}
+
+export type AlertRule = RuleConditions & {
+  id: string
+  name: string
+  product_name: string | null
+  store_name: string | null
+  notify_in_app: boolean
+  notify_email: boolean
+  active: boolean
+  phrase: string
+  last_fired_at: string | null
+  created_at: string
+}
+
+export type RulePreview = {
+  devaluation_pct: string | null
+  products_count: number
+  stores_count: number
+  evaluated: boolean
+  items: {
+    canonical_product_id: string | null
+    product_name: string
+    store_name: string
+    variation_pct: string
+  }[]
+}
+
+export type RuleOptions = {
+  stores: { id: string; slug: string; name: string }[]
+  categories: ProductCategory[]
+  milestones: { key: MilestoneKey; label: string; starts_on: string; ends_on: string }[]
+  max_rules: number
+}
+
+export type FiredAlert = {
+  id: string
+  rule_id: string
+  rule_name: string
+  fired_at: string
+  scope_label: string
+  phrase: string
+  products_count: number
+  devaluation_pct: string
+  average_pct: string
+  seen: boolean
+}
+
+export type FiredAlertDetail = FiredAlert & {
+  items: {
+    canonical_product_id: string | null
+    product_name: string
+    category: ProductCategory | null
+    store_name: string
+    price_start: string
+    price_end: string
+    variation_pct: string
+  }[]
+}
+
+export type AlertsSummary = {
+  unseen: number
+  total: number
+  active_rules: number
+  rules: number
+  affected_products: number
+  max_gap_pp: string | null
+}
+
 export type DemoRequest = {
   id: string
   company: string

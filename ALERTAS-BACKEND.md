@@ -1,12 +1,12 @@
 # Alertas (UX07): qué tiene que hacer el backend
 
-El frontend de Alertas ya está maquetado y funciona con datos de muestra. Este documento describe lo que falta del lado del backend para que funcione con datos reales: tablas, endpoints, el cálculo y el worker. Sigue las convenciones que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Alembic, ARQ, `services/` sin HTTP y `api/` sin reglas de negocio).
+El frontend de Alertas ya está conectado a la API (ver Estado). Este documento describe del lado del backend para que funcione con datos reales: tablas, endpoints, el cálculo y el worker. Sigue las convenciones que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Alembic, ARQ, `services/` sin HTTP y `api/` sin reglas de negocio).
 
 **Alcance de esta versión: las alertas solo se muestran dentro de la app** (bandeja de Alertas y campana del header). El aviso por correo queda para después, pero el modelo ya lo contempla para no tener que migrar de nuevo (ver [Correo](#8-correo-más-adelante)).
 
-## Estado (al 11/11/2026)
+## Estado (al 12/11/2026)
 
-Está hecho el **PR 1** de la [§11](#11-orden-sugerido-de-prs) (modelos, enums y migración, PR #30). Falta todo lo demás.
+Están hechos los **PR 1 a 5** de la [§11](#11-orden-sugerido-de-prs): modelos (PR #30) y, en `feat/alertas-datos-reales`, servicio, endpoints, worker, prellenado y el front conectado. Solo falta el correo (§8), que sigue fuera de alcance.
 
 | § | Qué | Estado | Dónde |
 | --- | --- | --- | --- |
@@ -14,26 +14,30 @@ Está hecho el **PR 1** de la [§11](#11-orden-sugerido-de-prs) (modelos, enums 
 | 3 | Enums `AlertRuleKind`, `AlertRuleScope`, `MilestoneKey` | ✅ Hecho | `app/models/enums.py` |
 | 3 | Modelos importados en `app/models/__init__.py` | ✅ Hecho | |
 | 10 | Tests de modelo: regla válida, rechazo de combinaciones inválidas, una alerta por regla y día | ✅ Hecho | `tests/test_alert_models.py` |
-| 4 | Servicio `app/services/alerts.py` (`evaluate_rule`, devaluación, variación, reduflación, regla de 7 días, constante de hitos) | ⏳ Falta | |
-| 5.1 | Endpoints de reglas (CRUD, `preview`, `options`) + `app/schemas/alerts.py` + router registrado | ⏳ Falta | |
-| 5.2 | Endpoints de alertas disparadas (`/alerts`, `/alerts/{id}`, `summary`, `seen`) | ⏳ Falta | |
-| 6 | Tarea ARQ `evaluate_alert_rules` y su cron | ⏳ Falta | `app/workers/tasks.py` |
-| 9 | Prellenado desde la ficha y el dashboard | ⏳ Falta | |
-| 10 | `tests/test_alerts.py` (CRUD, aislamiento, validaciones, cálculo, worker) | ⏳ Falta | |
+| 4 | ~~Servicio `app/services/alerts.py` (`evaluate_rule`, devaluación, variación, reduflación, regla de 7 días, constante de hitos)~~ | ✅ Hecho | `app/services/alerts.py` |
+| 5.1 | ~~Endpoints de reglas (CRUD, `preview`, `options`) + `app/schemas/alerts.py` + router registrado~~ | ✅ Hecho | `app/api/v1/alerts.py` (`rules_router`) |
+| 5.2 | ~~Endpoints de alertas disparadas (`/alerts`, `/alerts/{id}`, `summary`, `seen`)~~ | ✅ Hecho | `app/api/v1/alerts.py` (`alerts_router`) |
+| 6 | ~~Tarea ARQ `evaluate_alert_rules` y su cron~~ | ✅ Hecho | `app/workers/tasks.py`, 10:30 UTC |
+| 9 | ~~Prellenado desde la ficha y el dashboard~~ | ✅ Hecho | `?product=`, `?category=`, `?rule=` en `rule-form.tsx` |
+| 10 | ~~`tests/test_alerts.py` (CRUD, aislamiento, validaciones, cálculo, worker)~~ | ✅ Hecho | 31 tests |
+| — | ~~Front: bandeja, reglas, formulario y campana con la API~~ | ✅ Hecho | se borraron `alertas/data.ts`, `rule-data.ts` y `sample-products.ts` |
 | 8 | Correo | Fuera de alcance | |
 
 Diferencias con lo que dice este documento:
 
 - `milestone_key` quedó como enum (`enum_column`, VARCHAR + CHECK) en lugar de `String(30)`.
 - El índice de la bandeja es `(user_id, fired_at)` sin `DESC`. No cambia nada, porque Postgres puede recorrer el índice en orden inverso.
+- **Categoría:** `alert_rules.category` guarda el valor de `ProductCategory` (`almacen`, no `Almacén`). La columna sigue siendo texto, así que no hizo falta migración; la API la valida con el enum.
+- **Validaciones:** las combinaciones inválidas vuelven como `422` con un único `detail` en español (no la lista de Pydantic), así el front puede mostrar el mensaje tal cual.
+- **Campana apagada** (`notify_in_app = false`): la alerta igual se guarda en la bandeja, pero ya vista, así no suma a la campana.
+- **Borrar una regla borra su historial** (`ON DELETE CASCADE` de §3.2). El diálogo de confirmación del front lo avisa y sugiere pausarla.
+- **Reduflación (§4.3):** si el contenido neto se conoce en un solo extremo, el listing se descarta (no se puede saber si cambió).
+- **Vista previa:** sin caché en Redis por ahora. Son dos consultas `DISTINCT ON` acotadas a 8 días; si con el catálogo completo se pone lenta, agregar el caché de §5.1.
+- **Hitos:** `GET /alert-rules/options` devuelve las próximas fechas de cada hito desde una constante (`MILESTONE_DATES`, 2026 y 2027). Hay que actualizarla una vez por año o pasarla a una tabla.
+- **Fuente de la cotización (§7.2):** sigue sin fijarse; se usa la última cotización del tipo pedido, igual que el resto de la app.
+- **`?store=`** desde la ficha no se implementó: la ficha no tiene el id de la tienda, solo el slug.
 
-Dependencias de la [§7](#7-dependencias-y-decisiones-pendientes) que siguen abiertas:
-
-- **Categorías:** `canonical_products` todavía solo tiene `ean` y `name`.
-- **Fuente de la cotización:** todavía no está fijada en `settings`.
-- **Búsqueda de productos:** no existen `GET /products?q=` ni `GET /products/{id}`.
-- **Ya disponible:** `stores.visible_store_ids`.
-
+## 1. Pantallas que consumen esto
 ## 1. Pantallas que consumen esto
 
 | Ruta | Archivo del front | Qué necesita |
@@ -416,8 +420,8 @@ Los cambios en el front (leer los query params y cambiar las URLs de los botones
 ## 11. Orden sugerido de PRs
 
 1. ✅ Modelos + migración (`alert_rules`, `fired_alerts`, `fired_alert_items`) + enums. *(Hecho en el PR #30.)*
-2. CRUD de reglas + `options` + tests. Con esto el front ya puede crear, listar, pausar y borrar.
-3. `services/alerts.evaluate_rule` + `preview` + tests del cálculo.
-4. Worker `evaluate_alert_rules` + endpoints de alertas disparadas (`/alerts`, `summary`, `seen`).
-5. Prellenado desde la ficha y el dashboard (§9), coordinado con el front.
+2. ~~CRUD de reglas + `options` + tests. Con esto el front ya puede crear, listar, pausar y borrar.~~ ✅
+3. ~~`services/alerts.evaluate_rule` + `preview` + tests del cálculo.~~ ✅
+4. ~~Worker `evaluate_alert_rules` + endpoints de alertas disparadas (`/alerts`, `summary`, `seen`).~~ ✅
+5. ~~Prellenado desde la ficha y el dashboard (§9), coordinado con el front.~~ ✅
 6. Correo (§8), cuando se priorice.

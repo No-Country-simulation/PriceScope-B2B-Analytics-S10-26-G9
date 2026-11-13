@@ -7,6 +7,7 @@ from app.api.v1 import (
     admin_scraping,
     admin_stores,
     admin_users,
+    alerts,
     auth,
     dashboard,
     demo,
@@ -31,3 +32,5 @@ api_router.include_router(stores.router)
 api_router.include_router(rates.router)
 api_router.include_router(products.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(alerts.rules_router)
+api_router.include_router(alerts.alerts_router)

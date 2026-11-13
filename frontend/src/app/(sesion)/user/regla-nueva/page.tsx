@@ -1,13 +1,19 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 
-import { RuleForm } from "@/components/alertas/rule-form"
+import { RuleForm, RuleFormSkeleton } from "@/components/alertas/rule-form"
 
 export const metadata: Metadata = {
-  title: "Nueva regla · PriceScope",
+  title: "Regla de alerta · PriceScope",
 }
 
-// Maqueta UX07 · Nueva regla de alerta: solo front, sin backend. Las opciones
-// y la vista previa salen de datos de muestra (components/alertas/rule-data.ts).
+// UX07 · Nueva regla de alerta, o edición con ?rule=. También llega con
+// ?product= (ficha) o ?category= (dashboard); leerlos es dato de la request,
+// así que queda detrás de Suspense.
 export default function NuevaReglaPage() {
-  return <RuleForm />
+  return (
+    <Suspense fallback={<RuleFormSkeleton />}>
+      <RuleForm />
+    </Suspense>
+  )
 }
