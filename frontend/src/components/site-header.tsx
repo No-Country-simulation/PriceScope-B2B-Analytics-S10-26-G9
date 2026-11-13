@@ -20,7 +20,7 @@ export function SiteHeader({
   children?: ReactNode
 }) {
   return (
-    <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60 rounded-t-[inherit]">
+    <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center border-b bg-sidebar rounded-t-[inherit]">
       {/* Same width and gutters as the page container (@container/main), so
           the header lines up with the content when the sidebar toggles. */}
       <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center gap-2 px-4 lg:px-6">

@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { BellIcon, ChevronsUpDownIcon, LogOutIcon, UserIcon } from "lucide-react"
 
+import { ThemeToggle } from "@/components/theme-toggle"
 import { InitialsAvatar, ToneBadge } from "@/components/admin/tone"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils"
 export function ClientHeaderActions() {
   return (
     <>
+      <ThemeToggle />
       <NotificationsMenu />
       <Separator
         orientation="vertical"
@@ -134,7 +136,13 @@ function NotificationsMenu() {
   )
 }
 
-function UserMenu() {
+// Account menu of the header, shared with the backoffice (AdminShell), which
+// points "Mi cuenta" at the admin's own user page.
+export function UserMenu({
+  profileHref = () => "/user/perfil",
+}: {
+  profileHref?: (userId: string) => string
+}) {
   const { user, logout } = useAuth()
 
   if (!user) {
@@ -185,7 +193,7 @@ function UserMenu() {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href="/user/perfil" />}>
+        <DropdownMenuItem render={<Link href={profileHref(user.id)} />}>
           <UserIcon />
           Mi cuenta
         </DropdownMenuItem>
