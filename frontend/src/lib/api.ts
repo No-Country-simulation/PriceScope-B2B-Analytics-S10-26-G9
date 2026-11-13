@@ -106,6 +106,7 @@ export type MatrixRow = {
   name: string
   category: ProductCategory | null
   brand: string | null
+  image_url?: string | null
   content: string | null
   prices: MatrixCell[]
   spread: {
@@ -140,6 +141,7 @@ export type ProductSummary = {
   brand: string | null
   content: string | null
   category: ProductCategory | null
+  image_url?: string | null
 }
 
 export type ProductStore = {

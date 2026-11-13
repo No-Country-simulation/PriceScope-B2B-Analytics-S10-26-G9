@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { PageHeader } from "@/components/admin/page-header"
+import { ProductImage } from "@/components/producto/product-image"
 import { TablePagination } from "@/components/admin/table-pagination"
 import { IconTile, ToneBadge, type Tone } from "@/components/admin/tone"
 import { Button } from "@/components/ui/button"
@@ -406,11 +407,11 @@ export function PriceMatrix() {
                 />
               </TableHead>
               {stores.map((store) => (
-                <TableHead key={store.slug}>{store.name}</TableHead>
+                <TableHead key={store.slug} className="border-r">{store.name}</TableHead>
               ))}
               <TableHead
                 aria-sort={sort === "spread" ? "descending" : "none"}
-                className="text-right"
+                className="border-r text-right"
               >
                 <SortButton
                   label="Spread"
@@ -475,20 +476,32 @@ export function PriceMatrix() {
               </TableRow>
             ) : (
               rows.map(({ row, cells, spread, variation }) => (
-                <TableRow key={row.product_id} className={cn("group/row", loading && "opacity-60")}>
+                <TableRow key={row.product_id} className={cn("group/row h-24", loading && "opacity-60")}>
                   <TableCell className="sticky left-0 z-10 border-r bg-card py-3 pl-(--card-spacing) group-hover/row:bg-muted">
-                    <Link
-                      href={`/user/producto?id=${row.product_id}`}
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
-                      {row.name}
-                    </Link>
-                    <div className="text-muted-foreground">{subtitleOf(row)}</div>
+                    <div className="flex items-center gap-3">
+                      <ProductImage src={row.image_url} />
+                      <div className="w-44 min-w-0">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Link
+                                href={`/user/producto?id=${row.product_id}`}
+                                className="block truncate font-medium underline-offset-4 hover:underline"
+                              />
+                            }
+                          >
+                            {row.name}
+                          </TooltipTrigger>
+                          <TooltipContent side="right">{row.name}</TooltipContent>
+                        </Tooltip>
+                        <div className="truncate text-muted-foreground">{subtitleOf(row)}</div>
+                      </div>
+                    </div>
                   </TableCell>
                   {cells.map((cell, index) => (
                     <PriceCell key={stores[index].slug} cell={cell} />
                   ))}
-                  <TableCell className="text-right font-mono tabular-nums">
+                  <TableCell className="border-r text-right font-mono tabular-nums">
                     {formatSpread(spread)}
                   </TableCell>
                   <TableCell className="pr-(--card-spacing) text-right">
@@ -532,7 +545,7 @@ export function PriceMatrix() {
 function PriceCell({ cell }: { cell: Cell }) {
   if (cell.kind === "missing") {
     return (
-      <TableCell className="py-3">
+      <TableCell className="border-r py-3">
         <ToneBadge tone="neutral">Sin dato</ToneBadge>
       </TableCell>
     )
@@ -541,7 +554,7 @@ function PriceCell({ cell }: { cell: Cell }) {
   return (
     <TableCell
       className={cn(
-        "py-3 align-top",
+        "border-r py-3",
         cell.rank === "cheap" && "bg-emerald-500/5",
         cell.rank === "expensive" && "bg-red-500/5"
       )}
