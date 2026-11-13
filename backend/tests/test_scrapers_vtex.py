@@ -151,3 +151,21 @@ def test_missing_or_invalid_brand_is_none() -> None:
 
     del product["brand"]
     assert parse(product)[0].brand is None
+
+
+def test_extracts_first_https_image() -> None:
+    product = sample_product()
+    product["items"][0]["images"] = [
+        {"imageUrl": "http://insecure.example/a.jpg"},
+        {"imageUrl": "https://carrefourar.vtexassets.com/arquivos/ids/1/a.jpg"},
+    ]
+
+    assert parse(product)[0].image_url == "https://carrefourar.vtexassets.com/arquivos/ids/1/a.jpg"
+
+
+def test_missing_or_invalid_image_is_none() -> None:
+    product = sample_product()
+    assert parse(product)[0].image_url is None
+
+    product["items"][0]["images"] = "not a list"
+    assert parse(product)[0].image_url is None

@@ -21,6 +21,7 @@ class Listing(WithId, WithTimestamps, Base):
     url: Mapped[str] = mapped_column(String(500))
     source_category: Mapped[str | None] = mapped_column(String(160))
     brand: Mapped[str | None] = mapped_column(String(120))
+    image_url: Mapped[str | None] = mapped_column(String(500))
     canonical_product_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("canonical_products.id", ondelete="SET NULL"), index=True
     )

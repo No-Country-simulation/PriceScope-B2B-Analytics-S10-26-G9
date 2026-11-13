@@ -32,6 +32,20 @@ def normalize_ean(value: object) -> str | None:
     return code.zfill(14)
 
 
+def image_url(item: dict[str, Any]) -> str | None:
+    """First HTTPS image of a VTEX SKU, or None."""
+    images = item.get("images")
+    if not isinstance(images, list):
+        return None
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        url = image.get("imageUrl")
+        if isinstance(url, str) and url.startswith("https://") and len(url) <= 500:
+            return url
+    return None
+
+
 def parse_vtex_product(
     product: dict[str, Any],
     *,
@@ -98,6 +112,7 @@ def parse_vtex_product(
             continue
 
         ean = normalize_ean(item.get("ean"))
+        image = image_url(item)
 
         sellers = item.get("sellers")
         if not isinstance(sellers, list):
@@ -150,6 +165,7 @@ def parse_vtex_product(
                     unit=unit,
                     ean=ean,
                     brand=brand,
+                    image_url=image,
                 )
             )
 
