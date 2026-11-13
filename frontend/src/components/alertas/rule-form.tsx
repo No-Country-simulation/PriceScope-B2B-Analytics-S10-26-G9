@@ -854,7 +854,7 @@ function ProductPicker({
         className="h-9 pl-8"
       />
       {term.length >= 2 && (
-        <ul className="absolute inset-x-0 top-10 z-10 max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+        <ul className="absolute inset-x-0 top-10 z-50 max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-sm shadow-md">
           {results.loading && items.length === 0 ? (
             <li className="px-2 py-1.5 text-muted-foreground">Buscando…</li>
           ) : items.length === 0 ? (
@@ -898,7 +898,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <Card className="gap-0 py-0 shadow-xs">
+    <Card className="gap-0 overflow-visible py-0 shadow-xs">
       <CardHeader className="border-b py-(--card-spacing)">
         <CardTitle className="flex items-center gap-2.5">
           <span

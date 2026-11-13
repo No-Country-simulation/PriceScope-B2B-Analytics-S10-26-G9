@@ -277,6 +277,7 @@ async def get_matrix(
                 name=product.name,
                 category=product.category,
                 brand=product.brand,
+                image_url=product.image_url,
                 content=product.content,
                 prices=product_cells,
                 spread=_spread(product_cells),

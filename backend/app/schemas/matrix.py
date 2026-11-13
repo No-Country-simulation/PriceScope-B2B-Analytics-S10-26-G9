@@ -49,6 +49,7 @@ class MatrixRowOutput(BaseModel):
     name: str
     category: ProductCategory | None = None
     brand: str | None = None
+    image_url: str | None = None
     content: str | None = None
     prices: list[MatrixCellOutput]
     spread: MatrixSpreadOutput | None

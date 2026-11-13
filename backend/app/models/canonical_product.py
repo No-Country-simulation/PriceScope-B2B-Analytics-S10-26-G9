@@ -31,6 +31,7 @@ class CanonicalProduct(WithId, WithTimestamps, Base):
         enum_column(ProductCategory, "product_category"), index=True
     )
     brand: Mapped[str | None] = mapped_column(String(120))
+    image_url: Mapped[str | None] = mapped_column(String(500))
     # Net content as shown ("500 g") and normalized to g or ml for unit prices.
     content: Mapped[str | None] = mapped_column(String(40))
     grammage: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))

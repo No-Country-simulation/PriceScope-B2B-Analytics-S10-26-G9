@@ -32,6 +32,7 @@ class ScrapedObservation:
     location_id: uuid.UUID | None = None
     ean: str | None = None
     brand: str | None = None
+    image_url: str | None = None
 
 
 async def record_observation(
@@ -85,6 +86,7 @@ async def record_observation(
             name=observation.name,
             category=classify_category(observation.category),
             brand=observation.brand,
+            image_url=observation.image_url,
             content=content.label if content else None,
             grammage=content.amount if content else None,
             unit=content.unit if content else None,
@@ -94,7 +96,7 @@ async def record_observation(
         # so a curated value is never overwritten by a scraper.
         fill = {
             column: func.coalesce(table[column], statement.excluded[column])
-            for column in ("category", "brand", "content", "grammage", "unit")
+            for column in ("category", "brand", "image_url", "content", "grammage", "unit")
         }
         canonical_id = await db.scalar(
             statement.on_conflict_do_update(
@@ -110,6 +112,7 @@ async def record_observation(
         "url": observation.url,
         "source_category": observation.category,
         "brand": observation.brand,
+        "image_url": observation.image_url,
         "canonical_product_id": canonical_id,
     }
     listing_update = {
@@ -120,6 +123,8 @@ async def record_observation(
     }
     if observation.brand is not None:
         listing_update["brand"] = observation.brand
+    if observation.image_url is not None:
+        listing_update["image_url"] = observation.image_url
     if canonical_id is not None:
         listing_update["canonical_product_id"] = canonical_id
 

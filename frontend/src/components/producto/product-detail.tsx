@@ -26,6 +26,7 @@ import {
 } from "recharts"
 
 import { PageHeader } from "@/components/admin/page-header"
+import { ProductImage } from "@/components/producto/product-image"
 import { TablePagination } from "@/components/admin/table-pagination"
 import { ToneBadge } from "@/components/admin/tone"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -219,52 +220,61 @@ function ProductView({ product }: { product: ProductData }) {
         Matriz de precios
       </Link>
 
-      <PageHeader
-        title={product.name}
-        description={description}
-        badge={
-          reduStores.length > 0 && (
-            <ToneBadge tone="amber">
-              <TriangleAlertIcon />
-              Reduflación en {reduStores.map((store) => store.store_name).join(", ")}
-            </ToneBadge>
-          )
-        }
-        actions={
-          <>
-            <ToggleGroup
-              aria-label="Moneda"
-              value={[currency]}
-              variant="outline"
-              spacing={0}
-              onValueChange={(next) => next.length && setCurrency(next[0] as Currency)}
-            >
-              <ToggleGroupItem value="ARS" className="h-9 px-3">
-                ARS
-              </ToggleGroupItem>
-              <ToggleGroupItem value="USD" className="h-9 px-3">
-                USD
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <Button variant="outline" size="lg" onClick={() => setComparing(!comparing)}>
-              {comparing ? (
-                <XIcon data-icon="inline-start" />
-              ) : (
-                <GitCompareArrowsIcon data-icon="inline-start" />
-              )}
-              {comparing ? "Quitar comparación" : "Comparar"}
-            </Button>
-            <Button
-              size="lg"
-              nativeButton={false}
-              render={<Link href={`/user/regla-nueva?product=${product.id}`} />}
-            >
-              <BellPlusIcon data-icon="inline-start" />
-              Crear alerta
-            </Button>
-          </>
-        }
-      />
+      <div className="flex items-center gap-4">
+        <ProductImage
+          src={product.image_url}
+          alt={product.name}
+          className="size-20 rounded-lg"
+        />
+        <div className="min-w-0 flex-1">
+          <PageHeader
+            title={product.name}
+            description={description}
+            badge={
+              reduStores.length > 0 && (
+                <ToneBadge tone="amber">
+                  <TriangleAlertIcon />
+                  Reduflación en {reduStores.map((store) => store.store_name).join(", ")}
+                </ToneBadge>
+              )
+            }
+            actions={
+              <>
+                <ToggleGroup
+                  aria-label="Moneda"
+                  value={[currency]}
+                  variant="outline"
+                  spacing={0}
+                  onValueChange={(next) => next.length && setCurrency(next[0] as Currency)}
+                >
+                  <ToggleGroupItem value="ARS" className="h-9 px-3">
+                    ARS
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="USD" className="h-9 px-3">
+                    USD
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <Button variant="outline" size="lg" onClick={() => setComparing(!comparing)}>
+                  {comparing ? (
+                    <XIcon data-icon="inline-start" />
+                  ) : (
+                    <GitCompareArrowsIcon data-icon="inline-start" />
+                  )}
+                  {comparing ? "Quitar comparación" : "Comparar"}
+                </Button>
+                <Button
+                  size="lg"
+                  nativeButton={false}
+                  render={<Link href={`/user/regla-nueva?product=${product.id}`} />}
+                >
+                  <BellPlusIcon data-icon="inline-start" />
+                  Crear alerta
+                </Button>
+              </>
+            }
+          />
+        </div>
+      </div>
 
       <StoreCards product={product} currency={currency} colorOf={colorOf} />
 

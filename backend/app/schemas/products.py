@@ -23,6 +23,7 @@ class ProductSummaryOutput(BaseModel):
     brand: str | None
     content: str | None
     category: ProductCategory | None
+    image_url: str | None = None
 
 
 class ProductStoreOutput(BaseModel):
