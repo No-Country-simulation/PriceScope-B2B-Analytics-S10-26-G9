@@ -5,7 +5,10 @@ import { usePathname, useRouter } from "next/navigation"
 import { Loader2Icon } from "lucide-react"
 
 import { AdminSidebar, adminPageTitle } from "@/components/admin/admin-sidebar"
+import { UserMenu } from "@/components/cliente/client-header-actions"
 import { SiteHeader } from "@/components/site-header"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { HOME_BY_ROLE, SESSION_EXPIRED_PARAM, useAuth } from "@/lib/auth"
@@ -51,13 +54,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 64)",
-          "--header-height": "calc(var(--spacing) * 12)",
+          "--header-height": "calc(var(--spacing) * 16)",
         } as React.CSSProperties
       }
     >
       <AdminSidebar user={user} />
       <SidebarInset>
-        <React.Suspense fallback={<SiteHeader title="" />}>
+        <React.Suspense
+          fallback={
+            <SiteHeader title="">
+              <AdminHeaderActions />
+            </SiteHeader>
+          }
+        >
           <AdminHeader />
         </React.Suspense>
         <div className="flex flex-1 flex-col">
@@ -73,5 +82,29 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
 function AdminHeader() {
   const pathname = usePathname()
-  return <SiteHeader title={adminPageTitle(pathname)} section={pathname.startsWith("/admin/curaduria") ? "Calidad de datos" : undefined} />
+  return (
+    <SiteHeader
+      title={adminPageTitle(pathname)}
+      section={
+        pathname.startsWith("/admin/curaduria") ? "Calidad de datos" : undefined
+      }
+    >
+      <AdminHeaderActions />
+    </SiteHeader>
+  )
+}
+
+// Same header as the client app, minus the alerts bell (alerts are a client
+// feature). "Mi cuenta" opens the admin's own page in the users panel.
+function AdminHeaderActions() {
+  return (
+    <>
+      <ThemeToggle />
+      <Separator
+        orientation="vertical"
+        className="mx-1 h-6 data-vertical:self-auto"
+      />
+      <UserMenu profileHref={(id) => `/admin/usuarios/${id}`} />
+    </>
+  )
 }

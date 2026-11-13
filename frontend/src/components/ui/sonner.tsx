@@ -5,9 +5,8 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  // The app has no ThemeProvider yet, so it is always light. "system" would make
-  // sonner follow the OS dark mode and paint light-gray text on the light popover.
-  // resolvedTheme is undefined without a provider and keeps working if one is added.
+  // Follow the app's theme (next-themes), not the OS: "system" would paint
+  // light-gray text on the light popover when the OS is dark and the app is not.
   const { resolvedTheme } = useTheme()
 
   return (

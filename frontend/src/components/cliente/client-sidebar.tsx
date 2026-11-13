@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { SwitchAppLink } from "@/components/admin/admin-sidebar"
+import { SidebarCredits } from "@/components/sidebar-credits"
 import {
   Sidebar,
   SidebarContent,
@@ -104,6 +105,7 @@ export function ClientSidebar({
           />
         )}
         <QuotesCard />
+        <SidebarCredits />
       </SidebarFooter>
     </Sidebar>
   )

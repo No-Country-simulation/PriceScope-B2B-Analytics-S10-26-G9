@@ -6,12 +6,9 @@ import { usePathname } from "next/navigation"
 import {
   ActivityIcon,
   ChartNoAxesCombinedIcon,
-  EllipsisVerticalIcon,
   InboxIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
-  LogOutIcon,
-  UserIcon,
   UsersIcon,
 } from "lucide-react"
 
@@ -19,16 +16,7 @@ import {
   OperationStatusBadge,
   useOperationStatus,
 } from "@/components/admin/operation-status"
-import { InitialsAvatar } from "@/components/admin/tone"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { SidebarCredits } from "@/components/sidebar-credits"
 import {
   Sidebar,
   SidebarContent,
@@ -40,11 +28,8 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
-import { Skeleton } from "@/components/ui/skeleton"
 import type { CurrentUser } from "@/lib/api"
-import { useAuth } from "@/lib/auth"
 
 export const adminNav = [
   { title: "Solicitudes de demo", url: "/admin/solicitudes", icon: InboxIcon },
@@ -103,19 +88,7 @@ export function AdminSidebar({
             icon={LayoutDashboardIcon}
           />
         )}
-        {user ? (
-          <AdminUserMenu user={user} />
-        ) : (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              {/* Not SidebarMenuSkeleton: its random width breaks hydration. */}
-              <div className="flex h-12 items-center gap-2 p-2">
-                <Skeleton className="size-8 rounded-lg" />
-                <Skeleton className="h-4 flex-1" />
-              </div>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        )}
+        <SidebarCredits />
       </SidebarFooter>
     </Sidebar>
   )
@@ -177,63 +150,6 @@ function AdminNavMenu({ pathname }: { pathname: string | null }) {
           )}
         </SidebarMenuItem>
       ))}
-    </SidebarMenu>
-  )
-}
-
-export function AdminUserMenu({ user }: { user: CurrentUser }) {
-  const { isMobile } = useSidebar()
-  const { logout } = useAuth()
-
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
-            }
-          >
-            <InitialsAvatar name={user.name} className="size-8" />
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-xs text-foreground/70">
-                {user.email}
-              </span>
-            </div>
-            <EllipsisVerticalIcon className="ml-auto size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="min-w-56"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="p-0 font-normal">
-                <div className="grid px-1 py-1.5 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user.email}
-                  </span>
-                </div>
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              render={<Link href={`/admin/usuarios/${user.id}`} />}
-            >
-              <UserIcon />
-              Perfil
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()}>
-              <LogOutIcon />
-              Cerrar sesión
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
     </SidebarMenu>
   )
 }
