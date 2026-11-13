@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   title: "Operación · PriceScope",
 }
 
-// Maqueta UX10 · Operación: solo front, sin backend. Los scrapers y el log son
-// de muestra (components/operacion/data.ts) y el estado vive en el navegador.
+// UX10 · Operación: estado de los scrapers, log de fallas y ejecuciones
+// manuales (/admin/scraping/overview, /errors y /stores/{slug}/enqueue).
 export default function OperacionPage() {
   return <OperationBoard />
 }

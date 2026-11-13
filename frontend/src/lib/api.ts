@@ -320,6 +320,59 @@ export type AlertsSummary = {
   max_gap_pp: string | null
 }
 
+// Admin · Operación (/admin/scraping/overview, /errors, /stores/{slug}/enqueue).
+export type ScrapingRunStatus = "running" | "success" | "failed"
+
+export type StoreOverview = {
+  store_slug: string
+  store_name: string
+  schedule: string | null
+  next_run_at: string | null
+  last_run: {
+    id: string
+    status: ScrapingRunStatus
+    started_at: string
+    finished_at: string | null
+    products_received: number
+    observations_saved: number
+    error_code: string | null
+  } | null
+  last_success_at: string | null
+  expected: number | null
+  trend_7d: { date: string; products: number }[]
+  can_enqueue: boolean
+}
+
+export type OperationOverview = {
+  stores: StoreOverview[]
+  rates: {
+    last_quoted_at: string | null
+    ok: boolean
+    source: string | null
+    ingestions_24h: number
+  }
+}
+
+export type OperationErrorKind =
+  | "timeout"
+  | "network"
+  | "block"
+  | "server"
+  | "markup"
+  | "interrupted"
+  | "other"
+
+export type OperationError = {
+  id: string
+  date: string
+  store_slug: string
+  store_name: string
+  kind: OperationErrorKind
+  severity: "error" | "warning"
+  message: string
+  detail: string
+}
+
 export type DemoRequest = {
   id: string
   company: string

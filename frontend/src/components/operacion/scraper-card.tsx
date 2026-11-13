@@ -6,42 +6,46 @@ import { Card } from "@/components/ui/card"
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-import {
-  STATUS_LABEL,
-  STATUS_TONE,
-  TREND_LABELS,
-  durationOf,
-  lastRunOf,
-  productsOf,
-  trendOf,
-  type Scraper,
-  type ScraperStatus,
-} from "./data"
+import type { StoreOverview } from "@/lib/api"
+import { formatQuoteTime } from "@/lib/format"
+
+import { STATUS_LABEL, STATUS_TONE, type ScraperStatus } from "./labels"
+
+function duration(store: StoreOverview) {
+  const run = store.last_run
+  if (!run?.finished_at) return "—"
+  const seconds = Math.round((Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000)
+  return seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} s`
+}
 
 // UX10 · Operación: una fuente de datos por tarjeta, con su última ejecución,
 // los productos de los últimos 7 días y las acciones de reintento.
 export function ScraperCard({
-  scraper,
+  store,
   status,
   onRetry,
   onShowLog,
 }: {
-  scraper: Scraper
+  store: StoreOverview
   status: ScraperStatus
   onRetry: () => void
   onShowLog: () => void
 }) {
-  const running = status === "run"
-  const products = productsOf(scraper, status)
-  const trend = trendOf(scraper, status)
-  const max = Math.max(...trend, 1)
+  const running = status === "run" || status === "queued"
+  const run = store.last_run
+  const trend = store.trend_7d.map((point) => point.products)
+  const labels = store.trend_7d.map((point) => point.date.slice(8))
+  const max = Math.max(...trend, store.expected ?? 0, 1)
 
   const productsText =
-    products === null
+    running || !run
       ? "…"
       : status === "fail"
-        ? `0 de ${formatCount(scraper.expected)}`
-        : formatCount(products)
+        ? store.expected
+          ? `0 de ${formatCount(store.expected)}`
+          : "0"
+        : formatCount(run.observations_saved)
+  const lastRun = status === "queued" ? "en cola" : run ? formatQuoteTime(run.started_at) : "—"
 
   return (
     <Card className="gap-0 py-0 shadow-xs">
@@ -51,16 +55,18 @@ export function ScraperCard({
             <ServerIcon />
           </IconTile>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-sm font-semibold">{scraper.store}</span>
-            <span className="text-xs text-muted-foreground">{scraper.kind}</span>
+            <span className="text-sm font-semibold">{store.store_name}</span>
+            <span className="text-xs text-muted-foreground">
+              VTEX · {store.schedule ?? "sin horario programado"}
+            </span>
           </div>
         </div>
         <ToneBadge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</ToneBadge>
       </div>
 
       <dl className="grid grid-cols-3 gap-3 border-t p-4">
-        <Stat label="Última ejecución" value={lastRunOf(scraper, status)} />
-        <Stat label="Duración" value={durationOf(scraper, status)} />
+        <Stat label="Última ejecución" value={lastRun} />
+        <Stat label="Duración" value={running ? "—" : duration(store)} />
         <Stat label="Productos" value={productsText} />
       </dl>
 
@@ -70,26 +76,27 @@ export function ScraperCard({
         </span>
         <div
           role="img"
-          aria-label={`Productos extraídos por día: ${trend.join(", ")}`}
+          aria-label={`Productos extraídos por día (0 = sin extracción exitosa): ${trend.join(", ")}`}
           className="flex h-11 items-end gap-1"
         >
           {trend.map((value, index) => (
             <span
-              key={TREND_LABELS[index]}
+              key={labels[index]}
               className={cn(
                 "min-h-1.5 flex-1 rounded-xs",
                 running && index === trend.length - 1
                   ? "bg-brand"
                   : value === 0
-                    ? "bg-destructive"
+                    ? "bg-muted"
                     : "bg-muted-foreground/40"
               )}
+              title={value === 0 ? `${labels[index]}: sin extracción exitosa` : `${labels[index]}: ${formatCount(value)} productos`}
               style={{ height: `${Math.max(6, (value / max) * 44)}px` }}
             />
           ))}
         </div>
         <div className="flex gap-1 text-[10px] leading-none text-muted-foreground tabular-nums">
-          {TREND_LABELS.map((label) => (
+          {labels.map((label) => (
             <span key={label} className="flex-1 text-center">
               {label}
             </span>
@@ -102,15 +109,16 @@ export function ScraperCard({
           variant="outline"
           size="sm"
           onClick={onRetry}
-          disabled={running}
-          aria-label={`Reintentar la extracción de ${scraper.store}`}
+          disabled={running || !store.can_enqueue}
+          title={store.can_enqueue ? undefined : "La extracción programada no está habilitada para esta tienda"}
+          aria-label={`Reintentar la extracción de ${store.store_name}`}
         >
           {running ? (
             <Loader2Icon data-icon="inline-start" className="animate-spin" />
           ) : (
             <RotateCwIcon data-icon="inline-start" />
           )}
-          {running ? "En curso…" : "Reintentar"}
+          {running ? STATUS_LABEL[status] : "Reintentar"}
         </Button>
         <Button variant="ghost" size="sm" onClick={onShowLog}>
           <ScrollTextIcon data-icon="inline-start" />
