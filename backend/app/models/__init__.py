@@ -1,11 +1,14 @@
 from app.models.access_token import AccessToken
 from app.models.alert_rule import AlertRule
-from app.models.canonical_product import CanonicalProduct
+from app.models.canonical_product import CanonicalEanAlias, CanonicalProduct
+from app.models.curation import CurationEvent, ListingMatch
 from app.models.demo_request import DemoRequest
 from app.models.email_change import EmailChange
 from app.models.enums import (
     AlertRuleKind,
     AlertRuleScope,
+    CurationAction,
+    MatchStatus,
     MilestoneKey,
     OrganizationType,
     ProductCategory,
@@ -30,13 +33,18 @@ __all__ = [
     "AlertRule",
     "AlertRuleKind",
     "AlertRuleScope",
+    "CanonicalEanAlias",
     "CanonicalProduct",
+    "CurationAction",
+    "CurationEvent",
     "DemoRequest",
     "EmailChange",
     "ExchangeRate",
     "FiredAlert",
     "FiredAlertItem",
     "Listing",
+    "ListingMatch",
+    "MatchStatus",
     "MilestoneKey",
     "OrganizationType",
     "Price",

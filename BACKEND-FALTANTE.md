@@ -17,7 +17,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | ~~**Ficha de producto**~~ | `/user/producto?id=…` | API | `GET /products/{id}`, `/history`, `GET /products` | ✅ Conectada (PR 4) |
 | ~~**Dashboard**~~ | `/user/dashboard` | API | `GET /dashboard`, `GET /dashboard/options` | ✅ Conectada (PR 5) |
 | ~~**Alertas y reglas**~~ | `/user/alertas`, `/user/regla-nueva`, campana | API | `/alert-rules/*`, `/alerts/*`, tarea `evaluate_alert_rules` | ✅ Conectada (PR 6), ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
-| **Curaduría** | `/admin/curaduria` | `curaduria/data.ts` | — | ❌ Falta todo |
+| ~~**Curaduría**~~ | `/admin/curaduria` | API | `/admin/curation/*` | ✅ Conectada (PR 8) |
 | ~~**Operación**~~ | `/admin/operacion` | API | `GET /admin/scraping/overview`, `GET /admin/scraping/errors`, `POST /admin/scraping/stores/{slug}/enqueue` | ✅ Conectada (PR 7) |
 
 ## 2. Dependencias transversales
@@ -197,7 +197,7 @@ Ya está detallado en [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md). ~~Resumen de lo 
 
 ~~La campana del header (`client-header-actions.tsx`) importa `ALERTS` directo; pasa a `GET /alerts/summary`.~~ ✅ Lee `GET /alerts/summary` y las últimas 5 alertas, cada 5 minutos y al instante cuando la pantalla de Alertas cambia algo.
 
-### 3.6 Curaduría (`/admin/curaduria`)
+### ~~3.6 Curaduría (`/admin/curaduria`)~~ ✅
 
 **Front:** `components/curaduria/curation-board.tsx`, `review-state.ts` + `curaduria/data.ts`. Toda la lógica (cola, decisiones, historial, deshacer) vive en el estado del cliente.
 
@@ -222,6 +222,19 @@ Hoy un `listing` se vincula al canónico **solo si trae EAN** (`record_observati
 | `GET /canonical?q=` | Buscador del diálogo de catálogo |
 | `GET /history?limit=` | Tabla de historial |
 | `POST /history/{id}/revert` | "Revertir" (solo el último no revertido, igual que el front) |
+
+**Hecho (PR 8)**, con estas diferencias respecto del plan:
+
+- **Modelo:** `listing_matches` y `curation_events` como arriba. `score` es nullable (no hay canónico parecido → la publicación entra a la cola "sin propuesta"). `curation_events` guarda también el nombre del admin, y la reversión es un campo (`reverted_at/by`), no una acción.
+- **`canonical_products.ean` pasa a ser nullable:** "Crear canónico nuevo" acepta productos sin EAN. El front muestra "Sin EAN" en la ficha, la matriz y las reglas.
+- **`listings.brand`:** la marca de cada publicación, para comparar y sugerir.
+- **Sugerencias** (`services/curation.suggest`): los 5 canónicos con nombre más parecido según `pg_trgm` (`%`, índice GIN sobre `lower(name)`), puntuados 70 % nombre + 15 % misma marca + 15 % mismo contenido neto. `record_observation` encola cada publicación nueva que queda sin canónico, una sola vez: si se confirmó o se separó, no vuelve a la cola. El caso "con EAN que no coincide con su nombre" quedó afuera.
+- **Unir duplicados** mueve publicaciones, propuestas, reglas de alerta y alias al principal, completa los atributos vacíos del principal y borra el duplicado. **El EAN del duplicado queda como alias** (`canonical_ean_aliases`), y si el principal no tenía EAN, se lo pasa. Sin esto, la próxima extracción volvía a crear el duplicado.
+- **Revertir** restaura todo lo que se tocó, incluso el duplicado borrado (con el mismo `id`). Responde 409 si los datos cambiaron desde entonces (por ejemplo, el canónico creado ya tiene publicaciones).
+- `GET /queue` devuelve `{ total, stores, categories, uncategorized, items }`: tiendas y categorías con pendientes, para los filtros, y hasta 200 ítems.
+- Para publicaciones guardadas antes de este PR: `uv run python -m scripts.backfill_curation`.
+
+**Con los datos actuales la cola está vacía:** Carrefour y Jumbo (VTEX) siempre mandan EAN. Se va a llenar con tiendas que no lo publiquen. Para que sirva también con EAN haría falta detectar posibles duplicados (dos canónicos con EAN distinto, misma marca y contenido, nombre parecido y en tiendas distintas) y una forma de llegar a "Unir duplicados" sin un ítem de la cola.
 
 ### ~~3.7 Operación (`/admin/operacion`)~~ ✅
 
@@ -265,7 +278,7 @@ Cada PR deja algo usable y con tests.
 5. ~~**Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 6. ~~**Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)~~ ✅ Hecho.
 7. ~~**Operación:** `overview`, `errors` y `scraping_events`; conectar `/admin/operacion`. (§3.7)~~ ✅ Hecho, sin `scraping_events` (ver §3.7).
-8. **Curaduría:** `listing_matches`, `curation_events`, sugerencias con `pg_trgm` y endpoints; conectar `/admin/curaduria`. (§3.6)
+8. ~~**Curaduría:** `listing_matches`, `curation_events`, sugerencias con `pg_trgm` y endpoints; conectar `/admin/curaduria`. (§3.6)~~ ✅ Hecho.
 
 Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
@@ -276,7 +289,7 @@ Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
 ## 6. Del lado del front, al conectar
 
-- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), ~~`alertas`~~ ✅ (`data.ts`, `rule-data.ts` y `sample-products.ts`), `curaduria`, ~~`operacion`~~ ✅, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
+- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), ~~`alertas`~~ ✅ (`data.ts`, `rule-data.ts` y `sample-products.ts`), ~~`curaduria`~~ ✅ (`data.ts` y `review-state.ts`), ~~`operacion`~~ ✅, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
 - Las llamadas van por `lib/api.ts` (ya maneja token y refresh).
 - Agregar estados de carga (`Skeleton`) y vacío: con datos reales puede no haber precios para un rango o una tienda.
 - ~~El vínculo a la ficha pasa de `?p=<slug>` a `?id=<uuid>`.~~ ✅ Las alertas también linkean a `/user/producto?id=` desde el PR 6.

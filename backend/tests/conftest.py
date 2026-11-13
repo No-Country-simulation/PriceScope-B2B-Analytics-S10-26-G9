@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterator  # noqa: E402
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 import app.models  # noqa: E402, F401
 from app.api.deps import get_queue  # noqa: E402
@@ -32,6 +33,8 @@ class FakeQueue:
 @pytest.fixture(autouse=True)
 async def clean_database() -> AsyncIterator[None]:
     async with engine.begin() as conn:
+        # Created by a migration in real databases (curation suggestions use it).
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield

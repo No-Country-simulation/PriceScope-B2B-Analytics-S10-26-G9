@@ -874,7 +874,7 @@ function ProductPicker({
                   <span className="text-xs text-muted-foreground">
                     {[product.brand, product.category ? CATEGORY_LABEL[product.category] : null]
                       .filter(Boolean)
-                      .join(" · ") || product.ean}
+                      .join(" · ") || product.ean || "Sin EAN"}
                   </span>
                 </button>
               </li>

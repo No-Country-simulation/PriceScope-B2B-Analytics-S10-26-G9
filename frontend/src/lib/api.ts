@@ -102,7 +102,7 @@ export type MatrixCell = {
 
 export type MatrixRow = {
   product_id: string
-  ean: string
+  ean: string | null
   name: string
   category: ProductCategory | null
   brand: string | null
@@ -135,7 +135,7 @@ export type Shrinkflation = { before: string; after: string; changed_at: string 
 // GET /products and GET /products/{id}.
 export type ProductSummary = {
   id: string
-  ean: string
+  ean: string | null
   name: string
   brand: string | null
   content: string | null
@@ -371,6 +371,67 @@ export type OperationError = {
   severity: "error" | "warning"
   message: string
   detail: string
+}
+
+// Admin · Curaduría (/admin/curation/*).
+export type CanonicalProduct = {
+  id: string
+  ean: string | null
+  name: string
+  brand: string | null
+  content: string | null
+  category: ProductCategory | null
+}
+
+export type CurationStore = { slug: string; name: string }
+
+export type CurationItem = {
+  id: string
+  store: CurationStore
+  score: string | null
+  manual: boolean
+  created_at: string
+  listing: {
+    id: string
+    name: string
+    brand: string | null
+    content: string | null
+    category: ProductCategory | null
+    source_category: string | null
+    external_code: string
+    url: string
+    price: string | null
+  }
+  suggested: (CanonicalProduct & { price: string | null }) | null
+}
+
+export type CurationQueue = {
+  total: number
+  stores: CurationStore[]
+  categories: ProductCategory[]
+  uncategorized: boolean
+  items: CurationItem[]
+}
+
+export type CurationAction = "merged" | "confirmed" | "separated" | "chosen" | "created"
+
+export type CurationEvent = {
+  id: string
+  at: string
+  admin: string
+  action: CurationAction
+  before: string
+  after: string
+  reverted: { at: string; admin: string } | null
+  revertible: boolean
+}
+
+export type CanonicalDraft = {
+  name: string
+  brand: string | null
+  content: string | null
+  category: ProductCategory | null
+  ean: string | null
 }
 
 export type DemoRequest = {
