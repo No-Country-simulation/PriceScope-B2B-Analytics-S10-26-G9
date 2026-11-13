@@ -1,10 +1,10 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { BellIcon, ChevronsUpDownIcon, LogOutIcon, UserIcon } from "lucide-react"
 
 import { InitialsAvatar, ToneBadge } from "@/components/admin/tone"
-import { ALERTS } from "@/components/alertas/data"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -17,11 +17,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { AlertsSummary, FiredAlert, Page } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
+import { formatDateTime } from "@/lib/format"
+import { useApi, useOnAlertsChanged } from "@/lib/use-api"
 import { cn } from "@/lib/utils"
 
 // Right side of the client header: notifications and the account menu.
-// Las alertas son las mismas de muestra que UX07; no consulta el backend.
 export function ClientHeaderActions() {
   return (
     <>
@@ -35,8 +37,27 @@ export function ClientHeaderActions() {
   )
 }
 
+// The bell checks for new alerts every 5 minutes (they are evaluated once a day,
+// so there is no need for a socket) and right away when the alerts screen changes.
+const BELL_REFRESH_MS = 5 * 60 * 1000
+
 function NotificationsMenu() {
-  const newCount = ALERTS.filter((alert) => alert.isNew).length
+  const summary = useApi<AlertsSummary>("/alerts/summary")
+  const latest = useApi<Page<FiredAlert>>("/alerts?size=5")
+  const { reload: reloadSummary } = summary
+  const { reload: reloadLatest } = latest
+  const reload = React.useCallback(() => {
+    reloadSummary()
+    reloadLatest()
+  }, [reloadSummary, reloadLatest])
+  useOnAlertsChanged(reload)
+  React.useEffect(() => {
+    const timer = window.setInterval(reload, BELL_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [reload])
+
+  const newCount = summary.data?.unseen ?? 0
+  const alerts = latest.data?.items ?? []
 
   return (
     <DropdownMenu>
@@ -67,7 +88,12 @@ function NotificationsMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {ALERTS.map((alert) => (
+          {alerts.length === 0 && (
+            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+              {latest.data ? "Todavía no tenés alertas." : "Cargando…"}
+            </p>
+          )}
+          {alerts.map((alert) => (
             <DropdownMenuItem
               key={alert.id}
               render={<Link href="/user/alertas" />}
@@ -76,7 +102,7 @@ function NotificationsMenu() {
               <span
                 className={cn(
                   "mt-1.5 size-2 shrink-0 rounded-full",
-                  alert.isNew ? "bg-destructive" : "bg-border"
+                  alert.seen ? "bg-border" : "bg-destructive"
                 )}
                 aria-hidden="true"
               />
@@ -84,13 +110,13 @@ function NotificationsMenu() {
                 <span
                   className={cn(
                     "text-sm",
-                    alert.isNew ? "font-medium" : "text-muted-foreground"
+                    alert.seen ? "text-muted-foreground" : "font-medium"
                   )}
                 >
-                  {alert.rule}
+                  {alert.rule_name}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {alert.products} productos · {alert.firedAt}
+                  {alert.products_count} productos · {formatDateTime(alert.fired_at)}
                 </span>
               </span>
             </DropdownMenuItem>

@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models import Store
 from app.scrapers.vtex_client import VtexFetchError
-from app.services import mail, rates
+from app.services import alerts, mail, rates
 from app.services.scraping import scrape_vtex_store
 from app.services.scraping_lock import (
     ScrapeAlreadyRunningError,
@@ -79,6 +79,14 @@ async def ingest_rates(ctx: dict) -> int:
     except rates.SourceError:
         log.error("Rate ingestion: no source answered")
         return 0
+
+
+async def evaluate_alert_rules(ctx: dict) -> dict[str, int]:
+    """Daily job: evaluates every active rule with today's prices. Idempotent."""
+    async with SessionLocal() as db:
+        counts = await alerts.evaluate_all_rules(db)
+    log.info("Alert rules: %s", counts)
+    return counts
 
 
 async def recover_scraping_runs(ctx: dict) -> int:
@@ -269,6 +277,17 @@ class WorkerSettings:
             run_at_startup=False,
             unique=True,
             max_tries=SCRAPING_MAX_TRIES,
+        ),
+
+        # Alert rules: every day at 10:30 UTC (07:30 Argentina), after both scrapers.
+        cron(
+            evaluate_alert_rules,
+            hour=10,
+            minute=30,
+            second=0,
+            run_at_startup=False,
+            unique=True,
+            max_tries=1,
         ),
     ]
 

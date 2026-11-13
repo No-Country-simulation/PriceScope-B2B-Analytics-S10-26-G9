@@ -16,7 +16,7 @@ Convenciones: las mismas que ya usa `backend/` (FastAPI async, SQLAlchemy 2, Ale
 | ~~**Matriz de precios**~~ | `/user/matriz` | API | `GET /matrix` | ✅ Conectada (PR 3) |
 | ~~**Ficha de producto**~~ | `/user/producto?id=…` | API | `GET /products/{id}`, `/history`, `GET /products` | ✅ Conectada (PR 4) |
 | ~~**Dashboard**~~ | `/user/dashboard` | API | `GET /dashboard`, `GET /dashboard/options` | ✅ Conectada (PR 5) |
-| **Alertas y reglas** | `/user/alertas`, `/user/regla-nueva`, campana | `alertas/data.ts`, `rule-data.ts` | Solo tablas | ❌ Ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
+| ~~**Alertas y reglas**~~ | `/user/alertas`, `/user/regla-nueva`, campana | API | `/alert-rules/*`, `/alerts/*`, tarea `evaluate_alert_rules` | ✅ Conectada (PR 6), ver [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) |
 | **Curaduría** | `/admin/curaduria` | `curaduria/data.ts` | — | ❌ Falta todo |
 | **Operación** | `/admin/operacion` | `operacion/data.ts` | `GET /admin/scraping/runs`, `POST /admin/scraping/run` **existen** | 🟡 Falta resumen por tienda y log de errores |
 
@@ -153,23 +153,23 @@ Solo devuelve tiendas visibles para el usuario; si el producto no tiene publicac
 
 ### ~~3.4 Dashboard (`/user/dashboard`)~~ ✅
 
-**Front:** `components/dashboard/dashboard.tsx` y `dashboard-charts.tsx` + `dashboard/data.ts` (`summarize()` y `chartData()` generan todo con fórmulas).
+**Front:** `components/dashboard/dashboard.tsx` y `dashboard-charts.tsx` + ~~`dashboard/data.ts` (`summarize()` y `chartData()` generan todo con fórmulas)~~ `dashboard/filters.ts`.
 
 Filtros que manda el front: `start`, `end`, `stores[]`, `categories[]`, `currency` (`ARS`/`USD`), `quote` (`blue`/`oficial`).
 
-**Falta (depende de 2.1, 2.5 y 2.6):**
+~~**Falta (depende de 2.1, 2.5 y 2.6):**~~ Se resolvió con un solo endpoint (abajo); estos quedan como referencia si hay que separarlo.
 
 | Endpoint | Alimenta | Respuesta |
 | --- | --- | --- |
-| `GET /dashboard/summary` | 4 KPIs + tabla por categoría + CSV | `{ days, ars, usd, devaluation, gap, rate_from, rate_to, rows: [{ category, color, products, ars, usd, gap }] }` (filas ordenadas por `gap` desc) |
-| `GET /dashboard/series` | Gráfico de evolución (índice base 100 + dólar) y gráfico por categoría | `[{ date, ars, usd, rate, categories: { <name>: index } }]` |
-| `GET /dashboard/scatter` | Dispersión precio vs. dólar | `[{ category, month, price, fx }]`, un punto por categoría y mes |
-| `GET /dashboard/peaks` | "Picos por categoría" y marcas ▼ | `[{ category, date, value }]`: suba de más de 3 % en 7 días del índice ARS |
-| `GET /dashboard/options` | Filtros y fecha máxima | `{ stores, categories, min_date, max_date }` (hoy `SNAPSHOT_DATE` está fijo) |
+| ~~`GET /dashboard/summary`~~ | 4 KPIs + tabla por categoría + CSV | `{ days, ars, usd, devaluation, gap, rate_from, rate_to, rows: [{ category, color, products, ars, usd, gap }] }` (filas ordenadas por `gap` desc) |
+| ~~`GET /dashboard/series`~~ | Gráfico de evolución (índice base 100 + dólar) y gráfico por categoría | `[{ date, ars, usd, rate, categories: { <name>: index } }]` |
+| ~~`GET /dashboard/scatter`~~ | Dispersión precio vs. dólar | `[{ category, month, price, fx }]`, un punto por categoría y mes |
+| ~~`GET /dashboard/peaks`~~ | "Picos por categoría" y marcas ▼ | `[{ category, date, value }]`: suba de más de 3 % en 7 días del índice ARS |
+| ~~`GET /dashboard/options`~~ ✅ | Filtros y fecha máxima | `{ stores, categories, min_date, max_date }` (~~hoy `SNAPSHOT_DATE` está fijo~~) |
 
-Alternativa más simple: un solo `GET /dashboard?…` que devuelva `{ summary, series, scatter, peaks }`, que es como lo consume hoy el front (una sola llamada por cambio de filtro). **Recomendado empezar así** y separar solo si el payload pesa.
+~~Alternativa más simple: un solo `GET /dashboard?…` que devuelva `{ summary, series, scatter, peaks }`, que es como lo consume hoy el front (una sola llamada por cambio de filtro). **Recomendado empezar así** y separar solo si el payload pesa.~~ ✅ Elegida.
 
-Definiciones (para que coincidan con lo que muestra el front):
+Definiciones (para que coincidan con lo que muestra el front), ✅ implementadas así:
 
 - `ars`: variación del índice ponderado de precios regulares entre `start` y `end`.
 - `devaluation`: `rate_to / rate_from − 1` del dólar elegido.
@@ -189,13 +189,13 @@ Definiciones (para que coincidan con lo que muestra el front):
 
 ~~**Front a cambiar:** `summarize()`/`chartData()` se reemplazan por un fetch; la validación de filtros guardados en `localStorage` usa `options` en vez de las constantes.~~ ✅ Se borró `dashboard/data.ts` (queda `dashboard/filters.ts`). La vista guardada pasó a `v2` (tiendas por slug y categorías por valor de la API). Mientras llega la respuesta de un cambio de filtro se sigue mostrando la anterior, atenuada.
 
-**Pendiente:** el botón "Crear alerta de pico" ya pasa `?category=<valor>` (la categoría del pico más alto), pero el formulario de reglas todavía no lo lee (ALERTAS-BACKEND.md §9, PR 6).
+~~**Pendiente:** el botón "Crear alerta de pico" ya pasa `?category=<valor>` (la categoría del pico más alto), pero el formulario de reglas todavía no lo lee (ALERTAS-BACKEND.md §9, PR 6).~~ ✅ El formulario lo lee desde el PR 6.
 
-### 3.5 Alertas y reglas
+### ~~3.5 Alertas y reglas~~ ✅
 
-Ya está detallado en [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md). Resumen de lo que falta: servicio `alerts.py`, CRUD de reglas + `preview` + `options`, endpoints de alertas disparadas (`/alerts`, `summary`, `seen`), tarea ARQ `evaluate_alert_rules`. Depende de 2.1 (categorías) y de `GET /products?q=` (§3.3).
+Ya está detallado en [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md). ~~Resumen de lo que falta: servicio `alerts.py`, CRUD de reglas + `preview` + `options`, endpoints de alertas disparadas (`/alerts`, `summary`, `seen`), tarea ARQ `evaluate_alert_rules`. Depende de 2.1 (categorías) y de `GET /products?q=` (§3.3).~~ ✅ **Hecho (PR 6)**: todo eso, más el prellenado del formulario desde la ficha (`?product=`), el dashboard (`?category=`) y la edición (`?rule=`). Detalle y diferencias con el plan en ALERTAS-BACKEND.md.
 
-La campana del header (`client-header-actions.tsx`) importa `ALERTS` directo; pasa a `GET /alerts/summary`.
+~~La campana del header (`client-header-actions.tsx`) importa `ALERTS` directo; pasa a `GET /alerts/summary`.~~ ✅ Lee `GET /alerts/summary` y las últimas 5 alertas, cada 5 minutos y al instante cuando la pantalla de Alertas cambia algo.
 
 ### 3.6 Curaduría (`/admin/curaduria`)
 
@@ -253,7 +253,7 @@ Cada PR deja algo usable y con tests.
 3. ~~**Matriz completa:** categoría, contenido, `variation_30d`, filtros y orden en `/matrix`; conectar `/user/matriz`. (§3.2)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
 4. ~~**Ficha de producto:** `/products`, `/products/{id}`, `/products/{id}/history`; reduflación (§2.4); conectar `/user/producto`. (§3.3)~~ ✅ Hecho.
 5. ~~**Dashboard:** `GET /dashboard` (summary + series + scatter + peaks + options); conectar `/user/dashboard`. (§3.4)~~ ✅ Hecho (sin continuous aggregate, ver §2.5).
-6. **Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)
+6. ~~**Alertas:** PRs 2 a 5 de [ALERTAS-BACKEND.md](ALERTAS-BACKEND.md) §11. (§3.5)~~ ✅ Hecho.
 7. **Operación:** `overview`, `errors` y `scraping_events`; conectar `/admin/operacion`. (§3.7)
 8. **Curaduría:** `listing_matches`, `curation_events`, sugerencias con `pg_trgm` y endpoints; conectar `/admin/curaduria`. (§3.6)
 
@@ -266,7 +266,7 @@ Operación (7) no depende de nada y se puede hacer en paralelo con 1–5.
 
 ## 6. Del lado del front, al conectar
 
-- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), `alertas`, `curaduria`, `operacion`, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
+- Cada `data.ts` de muestra se borra cuando su pantalla queda conectada: ~~`matriz`~~ ✅, ~~`producto`~~ ✅, ~~`dashboard`~~ ✅ (junto con `SNAPSHOT_QUOTES`), ~~`alertas`~~ ✅ (`data.ts`, `rule-data.ts` y `sample-products.ts`), `curaduria`, `operacion`, y `QUOTES` (hoy solo es el valor de respaldo de `useQuoteValues()` mientras carga la cotización).
 - Las llamadas van por `lib/api.ts` (ya maneja token y refresh).
 - Agregar estados de carga (`Skeleton`) y vacío: con datos reales puede no haber precios para un rango o una tienda.
-- ~~El vínculo a la ficha pasa de `?p=<slug>` a `?id=<uuid>`.~~ ✅ En las alertas de muestra, `productHref()` (ahora en `alertas/rule-data.ts`) lleva a la matriz hasta el PR 6.
+- ~~El vínculo a la ficha pasa de `?p=<slug>` a `?id=<uuid>`.~~ ✅ Las alertas también linkean a `/user/producto?id=` desde el PR 6.

@@ -47,18 +47,24 @@ import {
 } from "@/components/ui/item"
 import { Switch } from "@/components/ui/switch"
 
-import { RULE_KIND_LABEL, type AlertRule } from "./data"
+import type { AlertRule } from "@/lib/api"
+import { formatDateTime } from "@/lib/format"
+
+const RULE_KIND_LABEL: Record<AlertRule["kind"], string> = {
+  devaluation: "Sube más que la devaluación",
+  milestone: "Hito",
+}
 
 // UX07 · Alertas, pestaña "Mis reglas": pausar/activar, editar y borrar con
-// confirmación. Las reglas todavía son de muestra; el alta entra después.
+// confirmación.
 export function RulesList({
   rules,
   onToggle,
   onDelete,
 }: {
   rules: AlertRule[]
-  onToggle: (id: string) => void
-  onDelete: (id: string) => void
+  onToggle: (rule: AlertRule) => void
+  onDelete: (rule: AlertRule) => void
 }) {
   const [pending, setPending] = React.useState<AlertRule | null>(null)
 
@@ -107,13 +113,14 @@ export function RulesList({
                   <ItemContent className="min-w-0 basis-72">
                     <ItemTitle className="flex-wrap">
                       {rule.name}
-                      <ToneBadge tone={rule.kind === "hit" ? "sky" : "neutral"}>
+                      <ToneBadge tone={rule.kind === "milestone" ? "sky" : "neutral"}>
                         {RULE_KIND_LABEL[rule.kind]}
                       </ToneBadge>
                     </ItemTitle>
                     <ItemDescription>{rule.phrase}</ItemDescription>
                     <span className="text-xs text-muted-foreground">
-                      Última vez: {rule.lastFired ?? "nunca"}
+                      Última vez:{" "}
+                      {rule.last_fired_at ? formatDateTime(rule.last_fired_at) : "nunca"}
                     </span>
                   </ItemContent>
                   <ItemActions>
@@ -123,7 +130,7 @@ export function RulesList({
                       </span>
                       <Switch
                         checked={rule.active}
-                        onCheckedChange={() => onToggle(rule.id)}
+                        onCheckedChange={() => onToggle(rule)}
                         aria-label={`Activar o pausar la regla ${rule.name}`}
                       />
                     </label>
@@ -136,7 +143,7 @@ export function RulesList({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-40">
                         <DropdownMenuItem
-                          render={<Link href="/user/regla-nueva" />}
+                          render={<Link href={`/user/regla-nueva?rule=${rule.id}`} />}
                         >
                           <PencilIcon />
                           Editar
@@ -167,8 +174,9 @@ export function RulesList({
           <DialogHeader>
             <DialogTitle>¿Eliminar la regla «{pending?.name}»?</DialogTitle>
             <DialogDescription>
-              Dejarás de recibir estas alertas. Las alertas que ya se
-              dispararon quedan en la bandeja. Esta acción no se puede deshacer.
+              Dejarás de recibir estas alertas y se borran de la bandeja
+              las que ya disparó. Esta acción no se puede deshacer. Si solo
+              querés dejar de recibirlas, pausala.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -178,7 +186,7 @@ export function RulesList({
             <Button
               variant="destructive"
               onClick={() => {
-                if (pending) onDelete(pending.id)
+                if (pending) onDelete(pending)
                 setPending(null)
               }}
             >

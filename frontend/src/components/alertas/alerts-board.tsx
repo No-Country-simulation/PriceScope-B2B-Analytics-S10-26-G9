@@ -14,6 +14,7 @@ import {
   PlusIcon,
   ZapIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { KpiCard } from "@/components/admin/kpi-card"
 import { PageHeader } from "@/components/admin/page-header"
@@ -42,52 +43,92 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatPct, formatPP } from "@/lib/format"
+import type { AlertRule, AlertsSummary, FiredAlert, FiredAlertDetail, Page } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
+import { CATEGORY_LABEL } from "@/lib/categories"
+import { formatCount, formatDateTime, formatPct, formatPP } from "@/lib/format"
+import { notifyAlertsChanged, useApi, useOnAlertsChanged } from "@/lib/use-api"
 import { cn } from "@/lib/utils"
 
-
-import { ALERTS, RULES, type AlertRule, type FiredAlert } from "./data"
-import { productHref } from "./rule-data"
 import { RulesList } from "./rules-list"
 
+const INBOX_SIZE = 50
+
 // UX07 · Alertas: KPIs, bandeja de alertas disparadas + detalle de la elegida,
-// y el listado de reglas con activar/pausar y eliminar. Todo el estado vive
-// acá y los datos son de muestra (components/alertas/data.ts): no hay API.
+// y el listado de reglas con activar/pausar y eliminar.
 export function AlertsBoard() {
-  const [seen, setSeen] = React.useState<string[]>([])
-  const [selectedId, setSelectedId] = React.useState(ALERTS[0].id)
-  const [rules, setRules] = React.useState<AlertRule[]>(() =>
-    RULES.map((rule) => ({ ...rule }))
-  )
+  const { request } = useAuth()
+  const summary = useApi<AlertsSummary>("/alerts/summary")
+  const inbox = useApi<Page<FiredAlert>>(`/alerts?size=${INBOX_SIZE}`)
+  const rules = useApi<AlertRule[]>("/alert-rules")
+  const [pickedId, setPickedId] = React.useState<string | null>(null)
 
-  const selected = ALERTS.find((alert) => alert.id === selectedId) ?? ALERTS[0]
-  const unseenIds = ALERTS.filter(
-    (alert) => alert.isNew && !seen.includes(alert.id)
-  ).map((alert) => alert.id)
-  const activeRules = rules.filter((rule) => rule.active).length
-  const affected = ALERTS.reduce((sum, alert) => sum + alert.products, 0)
-  const worstGap = Math.max(
-    ...ALERTS.map((alert) => alert.average - alert.devaluation)
-  )
+  const alerts = inbox.data?.items ?? []
+  const selectedId = pickedId ?? alerts[0]?.id ?? null
+  const detail = useApi<FiredAlertDetail>(selectedId ? `/alerts/${selectedId}` : null)
 
-  // Como en la maqueta: abrir una alerta en el detalle ya la deja por vista.
-  function pickAlert(id: string) {
-    setSelectedId(id)
-    setSeen((current) => (current.includes(id) ? current : [...current, id]))
+  const { reload: reloadSummary } = summary
+  const { reload: reloadInbox } = inbox
+  const reloadAlerts = React.useCallback(() => {
+    reloadSummary()
+    reloadInbox()
+  }, [reloadSummary, reloadInbox])
+  useOnAlertsChanged(reloadAlerts)
+
+  async function changed(action: Promise<unknown>, error: string) {
+    try {
+      await action
+    } catch {
+      toast.error(error)
+    }
+    reloadAlerts()
+    rules.reload()
+    notifyAlertsChanged()
   }
 
-  function toggleRule(id: string) {
-    setRules((current) =>
-      current.map((rule) =>
-        rule.id === id ? { ...rule, active: !rule.active } : rule
+  // Como en la maqueta: abrir una alerta en el detalle ya la deja por vista.
+  function pickAlert(alert: FiredAlert) {
+    setPickedId(alert.id)
+    if (!alert.seen) {
+      void changed(
+        request(`/alerts/${alert.id}/seen`, { method: "POST" }),
+        "No pudimos marcar la alerta como vista."
       )
+    }
+  }
+
+  function markAllSeen() {
+    void changed(
+      request("/alerts/seen", { method: "POST" }),
+      "No pudimos marcar las alertas como vistas."
     )
   }
 
-  function deleteRule(id: string) {
-    setRules((current) => current.filter((rule) => rule.id !== id))
+  function toggleRule(rule: AlertRule) {
+    void changed(
+      request(`/alert-rules/${rule.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !rule.active }),
+      }),
+      "No pudimos cambiar la regla."
+    )
   }
+
+  function deleteRule(rule: AlertRule) {
+    void changed(
+      request(`/alert-rules/${rule.id}`, { method: "DELETE" }).then(() =>
+        toast.success("Regla eliminada")
+      ),
+      "No pudimos eliminar la regla."
+    )
+    if (detail.data?.rule_id === rule.id) setPickedId(null)
+  }
+
+  const kpis = summary.data
+  const unseen = kpis?.unseen ?? alerts.filter((alert) => !alert.seen).length
+  const gap = kpis?.max_gap_pp == null ? null : Number(kpis.max_gap_pp)
 
   return (
     <>
@@ -107,35 +148,43 @@ export function AlertsBoard() {
       />
 
       <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-        <KpiCard
-          label="Sin ver"
-          value={String(unseenIds.length)}
-          hint={`De ${ALERTS.length} alertas disparadas en la bandeja`}
-          tone="red"
-          icon={<BellRingIcon />}
-        />
-        <KpiCard
-          label="Reglas activas"
-          value={`${activeRules} de ${rules.length}`}
-          hint="Las pausadas no disparan alertas"
-          tone="emerald"
-          icon={<ZapIcon />}
-        />
-        <KpiCard
-          label="Productos afectados"
-          value={String(affected)}
-          hint="Sumando todas las alertas de la bandeja"
-          tone="amber"
-          icon={<PackageIcon />}
-        />
-        <KpiCard
-          label="Mayor diferencia"
-          value={`+${formatPP(worstGap)}`}
-          hint="Suba promedio por encima del dólar"
-          tone="brand"
-          icon={<ChartNoAxesCombinedIcon />}
-          mono
-        />
+        {kpis ? (
+          <>
+            <KpiCard
+              label="Sin ver"
+              value={String(kpis.unseen)}
+              hint={`De ${kpis.total} alertas disparadas en la bandeja`}
+              tone="red"
+              icon={<BellRingIcon />}
+            />
+            <KpiCard
+              label="Reglas activas"
+              value={`${kpis.active_rules} de ${kpis.rules}`}
+              hint="Las pausadas no disparan alertas"
+              tone="emerald"
+              icon={<ZapIcon />}
+            />
+            <KpiCard
+              label="Productos afectados"
+              value={formatCount(kpis.affected_products)}
+              hint="En las alertas de los últimos 30 días"
+              tone="amber"
+              icon={<PackageIcon />}
+            />
+            <KpiCard
+              label="Mayor diferencia"
+              value={gap === null ? "—" : `+${formatPP(gap)}`}
+              hint="Suba promedio por encima del dólar, últimos 30 días"
+              tone="brand"
+              icon={<ChartNoAxesCombinedIcon />}
+              mono
+            />
+          </>
+        ) : (
+          Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))
+        )}
       </div>
 
       <Tabs defaultValue="fired" className="gap-4">
@@ -143,18 +192,20 @@ export function AlertsBoard() {
           <TabsTrigger value="fired">
             <InboxIcon />
             Alertas disparadas
-            {unseenIds.length > 0 && (
+            {unseen > 0 && (
               <Badge variant="destructive" className="tabular-nums">
-                {unseenIds.length}
+                {unseen}
               </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="rules">
             <ListChecksIcon />
             Mis reglas
-            <Badge variant="secondary" className="tabular-nums">
-              {rules.length}
-            </Badge>
+            {rules.data && (
+              <Badge variant="secondary" className="tabular-nums">
+                {rules.data.length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -162,35 +213,77 @@ export function AlertsBoard() {
           value="fired"
           className="grid items-start gap-4 @5xl/main:grid-cols-[360px_1fr]"
         >
-          <Inbox
-            alerts={ALERTS}
-            unseenIds={unseenIds}
-            selectedId={selected.id}
-            onPick={pickAlert}
-            onMarkAllSeen={() => setSeen(ALERTS.map((alert) => alert.id))}
-          />
-          <AlertDetail alert={selected} />
+          {inbox.error ? (
+            <EmptyCard className="@5xl/main:col-span-2">
+              No pudimos cargar las alertas. Probá de nuevo en unos minutos.
+            </EmptyCard>
+          ) : !inbox.data ? (
+            <>
+              <Skeleton className="h-96 rounded-xl" />
+              <Skeleton className="h-96 rounded-xl" />
+            </>
+          ) : alerts.length === 0 ? (
+            <EmptyCard className="@5xl/main:col-span-2">
+              Todavía no se disparó ninguna alerta. Revisamos tus reglas todos
+              los días a las 07:30.
+            </EmptyCard>
+          ) : (
+            <>
+              <Inbox
+                alerts={alerts}
+                total={inbox.data.total}
+                unseen={unseen}
+                selectedId={selectedId}
+                onPick={pickAlert}
+                onMarkAllSeen={markAllSeen}
+              />
+              {detail.data && detail.data.id === selectedId ? (
+                <AlertDetail alert={detail.data} />
+              ) : detail.error ? (
+                <EmptyCard>No pudimos cargar el detalle de la alerta.</EmptyCard>
+              ) : (
+                <Skeleton className="h-96 rounded-xl" />
+              )}
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="rules">
-          <RulesList rules={rules} onToggle={toggleRule} onDelete={deleteRule} />
+          {rules.data ? (
+            <RulesList rules={rules.data} onToggle={toggleRule} onDelete={deleteRule} />
+          ) : rules.error ? (
+            <EmptyCard>No pudimos cargar tus reglas.</EmptyCard>
+          ) : (
+            <Skeleton className="h-64 rounded-xl" />
+          )}
         </TabsContent>
       </Tabs>
     </>
   )
 }
 
+function EmptyCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <Card className={cn("items-center gap-3 px-6 py-12 text-center text-sm text-muted-foreground shadow-xs", className)}>
+      <InboxIcon className="size-6" />
+      <p>{children}</p>
+    </Card>
+  )
+}
+
 function Inbox({
   alerts,
-  unseenIds,
+  total,
+  unseen,
   selectedId,
   onPick,
   onMarkAllSeen,
 }: {
   alerts: FiredAlert[]
-  unseenIds: string[]
-  selectedId: string
-  onPick: (id: string) => void
+  total: number
+  unseen: number
+  selectedId: string | null
+  onPick: (alert: FiredAlert) => void
   onMarkAllSeen: () => void
 }) {
   return (
@@ -200,16 +293,16 @@ function Inbox({
           <h3>Bandeja</h3>
         </CardTitle>
         <CardDescription>
-          {unseenIds.length === 0
+          {unseen === 0
             ? "Estás al día"
-            : `${unseenIds.length} ${unseenIds.length === 1 ? "alerta sin ver" : "alertas sin ver"}`}
+            : `${unseen} ${unseen === 1 ? "alerta sin ver" : "alertas sin ver"}`}
         </CardDescription>
         <CardAction>
           <Button
             variant="ghost"
             size="sm"
             onClick={onMarkAllSeen}
-            disabled={unseenIds.length === 0}
+            disabled={unseen === 0}
           >
             <CheckCheckIcon data-icon="inline-start" />
             Marcar vistas
@@ -219,14 +312,13 @@ function Inbox({
       {/* Con muchas alertas la bandeja scrollea adentro de su card. */}
       <ItemGroup className="max-h-[34rem] gap-1 overflow-y-auto p-2">
         {alerts.map((alert) => {
-          const unseen = unseenIds.includes(alert.id)
           const active = alert.id === selectedId
           return (
             <Item
               key={alert.id}
               size="sm"
               render={<button type="button" />}
-              onClick={() => onPick(alert.id)}
+              onClick={() => onPick(alert)}
               aria-current={active ? "true" : undefined}
               className={cn(
                 "items-start text-left hover:bg-muted/50",
@@ -236,7 +328,7 @@ function Inbox({
               <span
                 className={cn(
                   "mt-1.5 size-2 shrink-0 rounded-full",
-                  unseen ? "bg-destructive" : "bg-border"
+                  alert.seen ? "bg-border" : "bg-destructive"
                 )}
                 aria-hidden="true"
               />
@@ -244,48 +336,55 @@ function Inbox({
                 <ItemTitle
                   className={cn(
                     "w-full justify-between",
-                    unseen ? "font-semibold" : "font-medium"
+                    alert.seen ? "font-medium" : "font-semibold"
                   )}
                 >
-                  <span className="truncate">{alert.rule}</span>
+                  <span className="truncate">{alert.rule_name}</span>
                   <span className="shrink-0 font-mono text-xs font-normal text-muted-foreground tabular-nums">
-                    {alert.firedAt.slice(0, 5)} · {alert.firedAt.slice(11)}
+                    {formatDateTime(alert.fired_at)}
                   </span>
                 </ItemTitle>
                 <ItemDescription className="line-clamp-1">
-                  {alert.scope}
+                  {alert.scope_label}
                 </ItemDescription>
                 <span className="flex flex-wrap gap-1.5 pt-0.5">
-                  <ToneBadge tone="neutral">{alert.products} productos</ToneBadge>
-                  {unseen && <ToneBadge tone="sky">Nueva</ToneBadge>}
+                  <ToneBadge tone="neutral">{alert.products_count} productos</ToneBadge>
+                  {!alert.seen && <ToneBadge tone="sky">Nueva</ToneBadge>}
                 </span>
               </ItemContent>
             </Item>
           )
         })}
+        {total > alerts.length && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            Se muestran las {alerts.length} más recientes de {total}.
+          </p>
+        )}
       </ItemGroup>
     </Card>
   )
 }
 
-function AlertDetail({ alert }: { alert: FiredAlert }) {
-  const gap = alert.average - alert.devaluation
+function AlertDetail({ alert }: { alert: FiredAlertDetail }) {
+  const devaluation = Number(alert.devaluation_pct)
+  const average = Number(alert.average_pct)
+  const gap = average - devaluation
 
   return (
     <Card className="min-w-0 gap-0 py-0 shadow-xs">
       <CardHeader className="border-b py-(--card-spacing)">
         <CardDescription className="font-mono text-xs tabular-nums">
-          {alert.firedAt}
+          {formatDateTime(alert.fired_at)}
         </CardDescription>
         <CardTitle className="text-lg tracking-tight">
-          <h3>{alert.rule}</h3>
+          <h3>{alert.rule_name}</h3>
         </CardTitle>
         <CardAction className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
             nativeButton={false}
-            render={<Link href="/user/regla-nueva" />}
+            render={<Link href={`/user/regla-nueva?rule=${alert.rule_id}`} />}
           >
             <PencilIcon data-icon="inline-start" />
             Editar regla
@@ -305,8 +404,8 @@ function AlertDetail({ alert }: { alert: FiredAlert }) {
       </CardHeader>
 
       <dl className="grid divide-y border-b sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <Stat label="Devaluación del período" value={formatPct(alert.devaluation)} />
-        <Stat label="Suba promedio" value={formatPct(alert.average)} />
+        <Stat label="Devaluación del período" value={formatPct(devaluation)} />
+        <Stat label="Suba promedio" value={formatPct(average)} />
         <Stat
           label="Diferencia"
           value={
@@ -337,27 +436,33 @@ function AlertDetail({ alert }: { alert: FiredAlert }) {
         </TableHeader>
         <TableBody>
           {alert.items.map((item) => (
-            <TableRow key={`${alert.id}-${item.product}`}>
+            <TableRow key={`${alert.id}-${item.product_name}-${item.store_name}`}>
               <TableCell className="py-3 pl-(--card-spacing)">
-                <Link
-                  href={productHref(item.product)}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {item.product}
-                </Link>
-                <div className="text-muted-foreground">{item.category}</div>
+                {item.canonical_product_id ? (
+                  <Link
+                    href={`/user/producto?id=${item.canonical_product_id}`}
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    {item.product_name}
+                  </Link>
+                ) : (
+                  <span className="font-medium">{item.product_name}</span>
+                )}
+                <div className="text-muted-foreground">
+                  {item.category ? CATEGORY_LABEL[item.category] : "Sin categoría"}
+                </div>
               </TableCell>
-              <TableCell>{item.store}</TableCell>
+              <TableCell>{item.store_name}</TableCell>
               <TableCell className="text-right font-mono tabular-nums">
-                {formatPct(item.variation)}
+                {formatPct(Number(item.variation_pct))}
               </TableCell>
               <TableCell className="text-right font-mono text-muted-foreground tabular-nums">
-                {formatPct(alert.devaluation)}
+                {formatPct(devaluation)}
               </TableCell>
               <TableCell className="pr-(--card-spacing) text-right">
                 <ToneBadge tone="red" className="ml-auto font-mono">
                   <ArrowUpIcon />
-                  {formatPP(item.variation - alert.devaluation)}
+                  {formatPP(Number(item.variation_pct) - devaluation)}
                 </ToneBadge>
               </TableCell>
             </TableRow>
