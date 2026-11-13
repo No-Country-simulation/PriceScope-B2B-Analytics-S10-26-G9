@@ -18,7 +18,7 @@ class ProductSummaryOutput(BaseModel):
     model_config = {"from_attributes": True}
 
     id: uuid.UUID
-    ean: str
+    ean: str | None
     name: str
     brand: str | None
     content: str | None

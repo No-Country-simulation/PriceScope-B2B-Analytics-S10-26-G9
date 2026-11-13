@@ -200,7 +200,7 @@ function ProductView({ product }: { product: ProductData }) {
     product.category ? CATEGORY_LABEL[product.category] : "Sin categoría",
     product.content,
     product.brand,
-    `EAN ${product.ean}`,
+    product.ean ? `EAN ${product.ean}` : null,
   ]
     .filter(Boolean)
     .join(" · ")

@@ -62,3 +62,19 @@ class MilestoneKey(StrEnum):
     BLACK_FRIDAY = "black_friday"
     HOT_SALE = "hot_sale"
     CUSTOM = "custom"
+
+
+class MatchStatus(StrEnum):
+    """State of a curation suggestion (listing → canonical product)."""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    SEPARATED = "separated"
+
+
+class CurationAction(StrEnum):
+    MERGED = "merged"
+    CONFIRMED = "confirmed"
+    SEPARATED = "separated"
+    CHOSEN = "chosen"
+    CREATED = "created"

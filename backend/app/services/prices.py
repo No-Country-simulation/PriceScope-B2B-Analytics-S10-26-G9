@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CanonicalProduct, Listing, Price, RateType, StoreLocation
-from app.services import rates
+from app.services import curation, rates
 from app.services.catalog import classify_category, parse_net_content
 
 CENTS = Decimal("0.01")
@@ -77,6 +77,9 @@ async def record_observation(
 
     canonical_id = None
     if observation.ean is not None:
+        # A merged duplicate's EAN resolves to the product that absorbed it.
+        canonical_id = await curation.resolve_ean(db, observation.ean)
+    if observation.ean is not None and canonical_id is None:
         statement = insert(CanonicalProduct).values(
             ean=observation.ean,
             name=observation.name,
@@ -106,6 +109,7 @@ async def record_observation(
         "name": observation.name,
         "url": observation.url,
         "source_category": observation.category,
+        "brand": observation.brand,
         "canonical_product_id": canonical_id,
     }
     listing_update = {
@@ -114,18 +118,25 @@ async def record_observation(
         "source_category": observation.category,
         "updated_at": func.now(),
     }
+    if observation.brand is not None:
+        listing_update["brand"] = observation.brand
     if canonical_id is not None:
         listing_update["canonical_product_id"] = canonical_id
 
-    listing_id = await db.scalar(
-        insert(Listing)
-        .values(**listing_values)
-        .on_conflict_do_update(
-            index_elements=["store_id", "external_code"],
-            set_=listing_update,
+    listing_id, linked_to = (
+        await db.execute(
+            insert(Listing)
+            .values(**listing_values)
+            .on_conflict_do_update(
+                index_elements=["store_id", "external_code"],
+                set_=listing_update,
+            )
+            .returning(Listing.id, Listing.canonical_product_id)
         )
-        .returning(Listing.id)
-    )
+    ).one()
+    if linked_to is None:
+        # No EAN and not curated yet: goes to the curation queue with a suggestion.
+        await curation.ensure_match(db, listing_id, observation.name, observation.brand)
 
     latest = await rates.latest_rates(db)
     sell = {r.type: r.sell for r in latest}

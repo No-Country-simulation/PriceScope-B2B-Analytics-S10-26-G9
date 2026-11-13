@@ -258,7 +258,7 @@ export function PriceMatrix() {
           const bySlug = new Map(row.prices.map((cell) => [cell.store_slug, cell]))
           return [
             row.name,
-            row.ean,
+            row.ean ?? "",
             row.category ? CATEGORY_LABEL[row.category] : "",
             row.content ?? "",
             ...stores.map((store) => {

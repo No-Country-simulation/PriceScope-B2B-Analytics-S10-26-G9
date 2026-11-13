@@ -45,7 +45,7 @@ class MatrixSpreadOutput(BaseModel):
 
 class MatrixRowOutput(BaseModel):
     product_id: uuid.UUID
-    ean: str
+    ean: str | None
     name: str
     category: ProductCategory | None = None
     brand: str | None = None
